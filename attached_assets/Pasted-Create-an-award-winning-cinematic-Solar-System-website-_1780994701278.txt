@@ -1,0 +1,114 @@
+Create an award-winning, cinematic Solar System website inspired by Awwwards-level experiences. The website should feel like a premium space documentary combined with Apple's product presentations.
+
+TECH STACK:
+
+* Next.js + React
+* Three.js for 3D graphics
+* GSAP + ScrollTrigger for scroll animations
+* Lenis for smooth scrolling
+* Tailwind CSS
+* Fully responsive for desktop, tablet, and mobile
+
+VISUAL STYLE:
+
+* Dark space background with millions of stars
+* Realistic 3D Sun and planets
+* Volumetric lighting and glow effects
+* Premium glassmorphism UI panels
+* NASA-inspired futuristic typography
+* High-end cinematic transitions
+* Smooth 60 FPS animations
+
+SCROLL EXPERIENCE:
+
+SECTION 1 – HERO
+
+* User lands in deep space
+* Massive glowing Sun appears in the center
+* Stars slowly move in the background
+* "Explore Our Solar System" headline fades in
+* Scroll indicator pulses at bottom
+
+SECTION 2 – SUN
+
+* As user scrolls, camera flies toward the Sun
+* Sun slowly rotates with animated solar flares
+* Heat waves and particle effects
+* Statistics appear with staggered animations
+
+SECTION 3 – MERCURY
+
+* Camera travels from Sun to Mercury
+* Mercury rotates in 3D
+* Information cards slide from left and right
+* Scroll-controlled camera movement
+
+SECTION 4 – VENUS
+
+* Cinematic transition through space
+* Venus emerges from darkness
+* Atmospheric cloud effects
+* Animated text reveals
+
+SECTION 5 – EARTH
+
+* Dramatic zoom into Earth
+* Realistic clouds and atmosphere
+* Day-night cycle effect
+* Earth rotates based on scroll position
+* Floating data points and orbiting satellites
+
+SECTION 6 – MARS
+
+* Camera flies through asteroid particles
+* Mars appears with dust storm shader effects
+* Interactive 3D surface details
+
+SECTION 7 – JUPITER
+
+* Giant planet fills entire screen
+* Animated storm and Great Red Spot
+* Moons orbit around Jupiter
+
+SECTION 8 – SATURN
+
+* Spectacular ring system
+* Rings react to mouse movement
+* Cinematic camera orbit
+
+SECTION 9 – URANUS & NEPTUNE
+
+* Deep-space atmosphere
+* Blue neon glow effects
+* Smooth transition between planets
+
+SECTION 10 – SOLAR SYSTEM OVERVIEW
+
+* Camera zooms far back
+* Entire Solar System visible
+* Planets orbit in real time
+* Timeline animation
+
+ANIMATION REQUIREMENTS:
+
+* Every element must animate on scroll
+* Scroll progress controls camera movement
+* Parallax stars
+* Floating particles
+* Motion blur effects
+* Smooth section transitions
+* No sudden jumps
+* Professional easing curves
+* Premium micro-interactions
+
+EXTRA FEATURES:
+
+* Interactive planet hover effects
+* Loading screen with animated solar system
+* Background ambient space audio toggle
+* Planet information modal
+* FPS optimization
+* Lazy loading assets
+* SEO optimized
+
+The final result should feel like a combination of NASA, Apple, SpaceX, and an Awwwards Site of the Day winner, with extremely smooth cinematic scroll storytelling and breathtaking visual effects.

@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Solar System"
+version = "1.0.0"
+id = "artifacts/solar-system"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21688
+
+[services.development]
+run = "pnpm --filter @workspace/solar-system run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/solar-system", "run", "build" ]
+publicDir = "artifacts/solar-system/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21688"
+BASE_PATH = "/"
