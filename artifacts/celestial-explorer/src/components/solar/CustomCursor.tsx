@@ -69,8 +69,8 @@ export default function CustomCursor() {
       if (ringRef.current) {
         const ringScale = isHovering ? 1.5 : (isClicking ? 0.9 : 1);
         ringRef.current.style.transform = `translate3d(${ringX}px, ${ringY}px, 0) scale(${ringScale})`;
-        ringRef.current.style.borderColor = isHovering ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.4)';
-        ringRef.current.style.boxShadow = isHovering ? '0 0 20px rgba(255,255,255,0.4)' : 'none';
+        ringRef.current.style.borderColor = isHovering ? 'var(--hud-color, rgba(255,255,255,0.8))' : 'var(--hud-color, rgba(255,255,255,0.25))';
+        ringRef.current.style.boxShadow = isHovering ? '0 0 20px var(--hud-color, rgba(255,255,255,0.4))' : 'none';
       }
 
       // Lerp dots
@@ -115,24 +115,28 @@ export default function CustomCursor() {
         ref={cursorRef}
         className="fixed top-0 left-0 w-5 h-5 rounded-full pointer-events-none z-[9999] -ml-2.5 -mt-2.5 transition-transform duration-100 ease-out will-change-transform"
         style={{
-          background: 'rgba(255,255,255,0.8)',
-          boxShadow: '0 0 10px 3px rgba(255,255,255,0.6), 0 0 30px rgba(255,255,255,0.2)'
+          background: 'var(--hud-color, rgba(255,255,255,0.8))',
+          boxShadow: '0 0 10px 3px var(--hud-color, rgba(255,255,255,0.6)), 0 0 30px var(--hud-color, rgba(255,255,255,0.2))'
         }}
       />
       
       <div 
         ref={ringRef}
-        className="fixed top-0 left-0 w-10 h-10 rounded-full pointer-events-none z-[9998] -ml-5 -mt-5 transition-colors transition-shadow duration-300 will-change-transform border border-white/40"
+        className="fixed top-0 left-0 w-10 h-10 rounded-full pointer-events-none z-[9998] -ml-5 -mt-5 transition-colors transition-shadow duration-300 will-change-transform border"
+        style={{
+          borderColor: 'var(--hud-color, rgba(255,255,255,0.4))'
+        }}
       />
 
       {Array.from({ length: 8 }).map((_, i) => (
         <div
           key={i}
           ref={el => { dotsRef.current[i] = el; }}
-          className="fixed top-0 left-0 w-1.5 h-1.5 bg-white rounded-full pointer-events-none z-[9997] -ml-[3px] -mt-[3px] will-change-transform"
+          className="fixed top-0 left-0 w-1.5 h-1.5 rounded-full pointer-events-none z-[9997] -ml-[3px] -mt-[3px] will-change-transform"
           style={{
+            background: 'var(--hud-color, #fff)',
             opacity: 0.8 - (i * 0.1),
-            boxShadow: '0 0 4px rgba(255,255,255,0.5)'
+            boxShadow: '0 0 4px var(--hud-color, rgba(255,255,255,0.5))'
           }}
         />
       ))}
