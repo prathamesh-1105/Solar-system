@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import PlanetScene from '../components/solar/PlanetScene';
 import LoadingScreen from '../components/solar/LoadingScreen';
 import AudioToggle from '../components/solar/AudioToggle';
+import CustomCursor from '../components/solar/CustomCursor';
 
 export default function SolarSystem() {
   const [loaded, setLoaded] = useState(false);
@@ -16,6 +17,7 @@ export default function SolarSystem() {
 
   return (
     <div className="relative w-full bg-black text-white selection:bg-primary selection:text-black">
+      <CustomCursor />
       {!loaded && <LoadingScreen />}
       
       {/* The 3D Canvas Background */}

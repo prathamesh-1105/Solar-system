@@ -1,0 +1,115 @@
+This is a good start, but I want a true premium cinematic experience. Completely redesign and enhance the current website.
+
+PLANET IMPROVEMENTS:
+
+* Replace all low-quality planets with ultra-realistic 4K/8K textured planets.
+* Add realistic normal maps, bump maps, roughness maps, and atmospheric shaders.
+* Earth must have:
+
+  * Real cloud layer rotating independently.
+  * Atmosphere glow.
+  * City lights visible on night side.
+  * Dynamic sunlight.
+* Jupiter must have animated storms and moving cloud bands.
+* Saturn must have physically accurate rings with transparency and shadows.
+* Mars must have dust storms and terrain depth.
+* Neptune and Uranus should have animated atmospheric layers.
+
+3D INTERACTION:
+
+* Every planet should react to mouse movement.
+* Moving mouse left rotates the planet left.
+* Moving mouse right rotates the planet right.
+* Moving mouse up/down slightly changes camera angle.
+* Smooth inertia and damping.
+* No jerky movement.
+* Hovering over a planet slightly enlarges it and increases glow.
+* Planet rotation should continue naturally when mouse stops.
+
+CAMERA SYSTEM:
+
+* Current camera movement feels basic.
+* Create cinematic camera paths.
+* Camera should orbit around planets.
+* Smooth acceleration and deceleration.
+* Add subtle camera shake near Sun and Jupiter.
+* Add depth of field effects.
+* Add cinematic motion blur during transitions.
+
+SCROLL STORYTELLING:
+
+* User should feel like traveling through space.
+* Camera must physically fly from one planet to another.
+* Use warp-speed transitions.
+* Add particle streaks during travel.
+* Space dust should pass by the camera.
+* No static sections.
+
+SPACE ENVIRONMENT:
+
+* Create a huge realistic galaxy.
+* Add multiple star layers for parallax.
+* Add nebula clouds.
+* Add asteroid fields.
+* Add comets occasionally crossing the screen.
+* Add distant galaxies.
+* Add volumetric fog in deep space.
+
+ADVANCED VISUAL EFFECTS:
+
+* Bloom effects.
+* God rays from the Sun.
+* Lens flares.
+* Dynamic shadows.
+* Ambient occlusion.
+* Volumetric lighting.
+* Reflections.
+* HDR rendering.
+* Realistic sunlight affecting all planets.
+
+UI IMPROVEMENTS:
+
+* Floating futuristic UI panels.
+* Glassmorphism design.
+* Smooth reveal animations.
+* Animated counters.
+* Planet statistics cards.
+* Orbit diagrams.
+* Interactive information panels.
+
+MICRO INTERACTIONS:
+
+* Cursor should become a glowing futuristic orb.
+* Cursor leaves a subtle particle trail.
+* Hover effects everywhere.
+* Buttons have magnetic attraction effect.
+* Text reveals letter-by-letter.
+* Elements react to cursor proximity.
+
+SOUND DESIGN:
+
+* Ambient space soundtrack.
+* Planet-specific sound effects.
+* Hover sounds.
+* Transition sounds.
+* Mute/unmute button.
+
+PERFORMANCE:
+
+* Maintain 60 FPS.
+* Use LOD (Level of Detail).
+* Lazy load textures.
+* Optimize shaders.
+* Compress assets.
+
+AWWWARDS LEVEL FEATURES:
+
+* Create moments that make users say "wow".
+* Every scroll should feel meaningful.
+* Website should look like a NASA + SpaceX + Apple collaboration.
+* Prioritize visual quality over simplicity.
+* Add premium details everywhere.
+* Make the experience feel alive and immersive.
+
+FINAL GOAL:
+When someone visits the website, it should feel like they are piloting a spacecraft through a realistic solar system rather than scrolling through a normal website.
