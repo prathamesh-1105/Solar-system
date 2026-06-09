@@ -420,6 +420,8 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
   useEffect(() => {
     if (!loaded || !canvasRef.current || !containerRef.current) return;
 
+    let isMounted = true;
+
     if (!isWebGLAvailable()) {
       setWebglError(true);
       return;
@@ -1091,6 +1093,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     // --- ANIMATION LOOP ---
     let frame = 0;
     const animate = () => {
+      if (!isMounted) return;
       frame = requestAnimationFrame(animate);
       const dt = clock.getDelta();
       const time = clock.getElapsedTime();
@@ -1326,6 +1329,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     window.addEventListener('resize', handleResize);
 
     return () => {
+      isMounted = false;
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('click', onMouseClick);
       window.removeEventListener('mousemove', onMouseMove);
