@@ -65,59 +65,6 @@ const noiseGLSL = `
   }
 `;
 
-const skyboxShaders = {
-  vertexShader: `
-    varying vec3 vWorldPosition;
-    void main() {
-      vWorldPosition = position;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    varying vec3 vWorldPosition;
-    uniform float time;
-    ${noiseGLSL}
-    void main() {
-      vec3 dir = normalize(vWorldPosition);
-      
-      // Starfield (high frequency noise)
-      float stars = 0.0;
-      float starHash = hash(dir.x * 123.45 + dir.y * 345.67 + dir.z * 567.89);
-      if (starHash > 0.993) {
-        float brightness = hash(starHash * 23.45) * (0.5 + 0.5 * sin(time * 1.5 + starHash * 10.0));
-        stars = brightness;
-      }
-      
-      // Secondary layer of finer, denser stars
-      float fineStarHash = hash(dir.x * 234.56 + dir.y * 456.78 + dir.z * 678.90);
-      if (fineStarHash > 0.997) {
-        stars += hash(fineStarHash * 45.67) * 0.45;
-      }
-      
-      // Nebulae clouds (FBM noise with deep color layers)
-      vec3 nebPos = dir * 2.8 + vec3(time * 0.003, 0.0, 0.0);
-      float nebVal1 = fbm(nebPos);
-      float nebVal2 = fbm(nebPos * 1.6 - vec3(0.0, time * 0.002, time * 0.001));
-      
-      // Space nebula colors
-      vec3 spaceBlue = vec3(0.01, 0.03, 0.12);
-      vec3 spacePurple = vec3(0.06, 0.01, 0.10);
-      vec3 spaceMagenta = vec3(0.12, 0.02, 0.07);
-      vec3 spaceOrange = vec3(0.12, 0.05, 0.01);
-      
-      vec3 nebulaColor = mix(spaceBlue, spacePurple, nebVal1);
-      nebulaColor = mix(nebulaColor, spaceMagenta, nebVal2 * 0.5);
-      nebulaColor = mix(nebulaColor, spaceOrange, smoothstep(0.48, 0.78, nebVal1 + nebVal2) * 0.4);
-      
-      // Dense Milky Way dust lane band along the galactic plane
-      float galBand = smoothstep(0.35, 0.0, abs(dir.y + 0.12 * sin(dir.x * 3.5 + dir.z * 2.5)));
-      vec3 milkyWayColor = vec3(0.22, 0.15, 0.11) * galBand * (0.3 + 0.7 * fbm(dir * 4.2));
-      
-      vec3 finalColor = nebulaColor * 0.75 + milkyWayColor + vec3(1.0) * stars;
-      gl_FragColor = vec4(finalColor, 1.0);
-    }
-  `
-};
 
 const sunShaders = {
   vertexShader: `
@@ -602,8 +549,57 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     const skyboxGeo = addDisposable(new THREE.SphereGeometry(950, 32, 32));
     const skyboxMat = addDisposable(new THREE.ShaderMaterial({
       uniforms: { time: { value: 0 } },
-      vertexShader: skyboxShaders.vertexShader,
-      fragmentShader: skyboxShaders.fragmentShader,
+      vertexShader: `
+        varying vec3 vWorldPosition;
+        void main() {
+          vWorldPosition = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vWorldPosition;
+        uniform float time;
+        ${noiseGLSL}
+        void main() {
+          vec3 dir = normalize(vWorldPosition);
+          
+          // Starfield (high frequency noise)
+          float stars = 0.0;
+          float starHash = hash(dir.x * 123.45 + dir.y * 345.67 + dir.z * 567.89);
+          if (starHash > 0.993) {
+            float brightness = hash(starHash * 23.45) * (0.5 + 0.5 * sin(time * 1.5 + starHash * 10.0));
+            stars = brightness;
+          }
+          
+          // Secondary layer of finer, denser stars
+          float fineStarHash = hash(dir.x * 234.56 + dir.y * 456.78 + dir.z * 678.90);
+          if (fineStarHash > 0.997) {
+            stars += hash(fineStarHash * 45.67) * 0.45;
+          }
+          
+          // Nebulae clouds (FBM noise with deep color layers)
+          vec3 nebPos = dir * 2.8 + vec3(time * 0.003, 0.0, 0.0);
+          float nebVal1 = fbm(nebPos);
+          float nebVal2 = fbm(nebPos * 1.6 - vec3(0.0, time * 0.002, time * 0.001));
+          
+          // Space nebula colors
+          vec3 spaceBlue = vec3(0.01, 0.03, 0.12);
+          vec3 spacePurple = vec3(0.06, 0.01, 0.10);
+          vec3 spaceMagenta = vec3(0.12, 0.02, 0.07);
+          vec3 spaceOrange = vec3(0.12, 0.05, 0.01);
+          
+          vec3 nebulaColor = mix(spaceBlue, spacePurple, nebVal1);
+          nebulaColor = mix(nebulaColor, spaceMagenta, nebVal2 * 0.5);
+          nebulaColor = mix(nebulaColor, spaceOrange, smoothstep(0.48, 0.78, nebVal1 + nebVal2) * 0.4);
+          
+          // Dense Milky Way dust lane band along the galactic plane
+          float galBand = smoothstep(0.35, 0.0, abs(dir.y + 0.12 * sin(dir.x * 3.5 + dir.z * 2.5)));
+          vec3 milkyWayColor = vec3(0.22, 0.15, 0.11) * galBand * (0.3 + 0.7 * fbm(dir * 4.2));
+          
+          vec3 finalColor = nebulaColor * 0.75 + milkyWayColor + vec3(1.0) * stars;
+          gl_FragColor = vec4(finalColor, 1.0);
+        }
+      `,
       side: THREE.BackSide,
       depthWrite: false
     }));
