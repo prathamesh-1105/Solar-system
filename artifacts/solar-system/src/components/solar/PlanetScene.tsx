@@ -23,13 +23,32 @@ const planetData = {
   Neptune: { name: 'Neptune', type: 'Ice Giant', distance: '4.5B km', diameter: '49,244 km', moons: '16', atmosphere: 'Hydrogen, Helium, Methane', fact: 'Neptune has supersonic winds reaching speeds of 2,100 km/h.', color: '#3E54E8' }
 };
 
+function isWebGLAvailable(): boolean {
+  try {
+    const canvas = document.createElement('canvas');
+    return !!(
+      canvas.getContext('webgl2') ||
+      canvas.getContext('webgl') ||
+      canvas.getContext('experimental-webgl')
+    );
+  } catch {
+    return false;
+  }
+}
+
 export default function PlanetScene({ loaded }: PlanetSceneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [selectedPlanet, setSelectedPlanet] = useState<any | null>(null);
+  const [webglError, setWebglError] = useState(false);
 
   useEffect(() => {
     if (!loaded || !canvasRef.current || !containerRef.current) return;
+
+    if (!isWebGLAvailable()) {
+      setWebglError(true);
+      return;
+    }
 
     // --- LENIS SETUP ---
     const lenis = new Lenis({
@@ -48,12 +67,19 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(0x000000, 0.015);
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
-    const renderer = new THREE.WebGLRenderer({
-      canvas: canvasRef.current,
-      antialias: true,
-      alpha: true,
-      powerPreference: 'high-performance'
-    });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        canvas: canvasRef.current,
+        antialias: true,
+        alpha: true,
+        powerPreference: 'high-performance'
+      });
+    } catch {
+      setWebglError(true);
+      lenis.destroy();
+      return;
+    }
 
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -434,13 +460,14 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
 
     // --- INTERACTION & INERTIA ---
     const raycaster = new THREE.Raycaster();
+    raycaster.camera = camera;
     const mouse = new THREE.Vector2();
     let mouseVelX = 0, mouseVelY = 0;
     let lastMouseX = window.innerWidth/2, lastMouseY = window.innerHeight/2;
     let currentMouseNDCX = 0, currentMouseNDCY = 0;
 
     const onMouseClick = () => {
-      const intersects = raycaster.intersectObjects(interactableMeshes);
+      const intersects = raycaster.intersectObjects(interactableMeshes, false);
       if (intersects.length > 0) {
         const name = intersects[0].object.userData.name;
         if (name && planetData[name as keyof typeof planetData]) {
@@ -459,7 +486,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       mouse.x = currentMouseNDCX;
       mouse.y = currentMouseNDCY;
       
-      const intersects = raycaster.intersectObjects(interactableMeshes);
+      const intersects = raycaster.intersectObjects(interactableMeshes, false);
       let hoveredObj = null;
       if (intersects.length > 0) {
         hoveredObj = intersects[0].object;
@@ -680,6 +707,19 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       </section>
     );
   };
+
+  if (webglError) {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center bg-black text-white text-center px-8">
+        <div className="text-6xl mb-6" style={{ color: '#FDB813' }}>&#9728;</div>
+        <h2 className="text-2xl font-display font-bold tracking-widest mb-4">SOLAR SYSTEM</h2>
+        <p className="text-white/50 font-mono text-sm max-w-sm">
+          Your browser does not support WebGL, which is required for the 3D experience.<br /><br />
+          Please try a modern browser with hardware acceleration enabled.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <>
