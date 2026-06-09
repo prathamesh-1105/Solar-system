@@ -5,6 +5,12 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import Lenis from 'lenis';
 import PlanetModal from './PlanetModal';
 
+// Post-processing imports
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+
 gsap.registerPlugin(ScrollTrigger);
 
 interface PlanetSceneProps {
@@ -12,7 +18,7 @@ interface PlanetSceneProps {
 }
 
 const planetData = {
-  Sun: { name: 'The Sun', type: 'Yellow Dwarf Star', distance: '0 km', diameter: '1,392,684 km', moons: '0', atmosphere: 'Hydrogen, Helium', fact: 'The Sun accounts for 99.86% of the mass in the solar system.', color: '#FF6600' },
+  Sun: { name: 'The Sun', type: 'Yellow Dwarf Star', distance: '0 km', diameter: '1,392,684 km', moons: '0', atmosphere: 'Hydrogen, Helium', fact: 'The Sun accounts for 99.86% of the mass in the solar system.', color: '#FF5500' },
   Mercury: { name: 'Mercury', type: 'Terrestrial Planet', distance: '57.9M km', diameter: '4,879 km', moons: '0', atmosphere: 'None', fact: 'A year on Mercury is 88 Earth days, but a solar day lasts 176 Earth days.', color: '#9C9C9C' },
   Venus: { name: 'Venus', type: 'Terrestrial Planet', distance: '108.2M km', diameter: '12,104 km', moons: '0', atmosphere: 'Carbon Dioxide, Nitrogen', fact: 'Venus rotates backwards compared to most other planets.', color: '#E8C66A' },
   Earth: { name: 'Earth', type: 'Terrestrial Planet', distance: '149.6M km', diameter: '12,742 km', moons: '1', atmosphere: 'Nitrogen, Oxygen', fact: 'The only known planet to harbor life.', color: '#3b82f6' },
@@ -59,6 +65,60 @@ const noiseGLSL = `
   }
 `;
 
+const skyboxShaders = {
+  vertexShader: `
+    varying vec3 vWorldPosition;
+    void main() {
+      vWorldPosition = position;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    varying vec3 vWorldPosition;
+    uniform float time;
+    ${noiseGLSL}
+    void main() {
+      vec3 dir = normalize(vWorldPosition);
+      
+      // Starfield (high frequency noise)
+      float stars = 0.0;
+      float starHash = hash(dir.x * 123.45 + dir.y * 345.67 + dir.z * 567.89);
+      if (starHash > 0.993) {
+        float brightness = hash(starHash * 23.45) * (0.5 + 0.5 * sin(time * 1.5 + starHash * 10.0));
+        stars = brightness;
+      }
+      
+      // Secondary layer of finer, denser stars
+      float fineStarHash = hash(dir.x * 234.56 + dir.y * 456.78 + dir.z * 678.90);
+      if (fineStarHash > 0.997) {
+        stars += hash(fineStarHash * 45.67) * 0.45;
+      }
+      
+      // Nebulae clouds (FBM noise with deep color layers)
+      vec3 nebPos = dir * 2.8 + vec3(time * 0.003, 0.0, 0.0);
+      float nebVal1 = fbm(nebPos);
+      float nebVal2 = fbm(nebPos * 1.6 - vec3(0.0, time * 0.002, time * 0.001));
+      
+      // Space nebula colors
+      vec3 spaceBlue = vec3(0.01, 0.03, 0.12);
+      vec3 spacePurple = vec3(0.06, 0.01, 0.10);
+      vec3 spaceMagenta = vec3(0.12, 0.02, 0.07);
+      vec3 spaceOrange = vec3(0.12, 0.05, 0.01);
+      
+      vec3 nebulaColor = mix(spaceBlue, spacePurple, nebVal1);
+      nebulaColor = mix(nebulaColor, spaceMagenta, nebVal2 * 0.5);
+      nebulaColor = mix(nebulaColor, spaceOrange, smoothstep(0.48, 0.78, nebVal1 + nebVal2) * 0.4);
+      
+      // Dense Milky Way dust lane band along the galactic plane
+      float galBand = smoothstep(0.35, 0.0, abs(dir.y + 0.12 * sin(dir.x * 3.5 + dir.z * 2.5)));
+      vec3 milkyWayColor = vec3(0.22, 0.15, 0.11) * galBand * (0.3 + 0.7 * fbm(dir * 4.2));
+      
+      vec3 finalColor = nebulaColor * 0.75 + milkyWayColor + vec3(1.0) * stars;
+      gl_FragColor = vec4(finalColor, 1.0);
+    }
+  `
+};
+
 const sunShaders = {
   vertexShader: `
     varying vec3 vNormal;
@@ -70,7 +130,7 @@ const sunShaders = {
       vUv = uv;
       vNormal = normalize(normalMatrix * normal);
       vPosition = position;
-      float disp = fbm(position * 0.4 + vec3(0.0, 0.0, time * 0.5)) * 0.4;
+      float disp = fbm(position * 0.45 + vec3(0.0, 0.0, time * 0.5)) * 0.45;
       vec3 displaced = position + normal * disp;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
     }
@@ -80,22 +140,30 @@ const sunShaders = {
     varying vec3 vPosition;
     varying vec2 vUv;
     uniform float time;
+    uniform sampler2D uTexture;
     ${noiseGLSL}
     void main() {
-      vec3 p = normalize(vPosition) * 4.0 + vec3(0.0, 0.0, time * 0.2);
+      vec3 p = normalize(vPosition) * 4.2 + vec3(0.0, 0.0, time * 0.25);
       float n1 = fbm(p);
-      float n2 = fbm(p * 2.0 - vec3(time * 0.15, time * 0.1, 0.0));
-      vec3 colorCore = vec3(1.0, 0.9, 0.45);
-      vec3 colorMid = vec3(1.0, 0.45, 0.0);
-      vec3 colorOuter = vec3(0.85, 0.05, 0.0);
-      float mixFactor = smoothstep(0.15, 0.75, n1 + n2 * 0.25);
+      float n2 = fbm(p * 2.2 - vec3(time * 0.18, time * 0.12, 0.0));
+      
+      // Blend procedural plasma with NASA sunspots texture
+      vec4 texColor = texture2D(uTexture, vUv);
+      
+      vec3 colorCore = vec3(1.0, 0.95, 0.5) * texColor.rgb;
+      vec3 colorMid = vec3(1.0, 0.48, 0.0) * texColor.rgb;
+      vec3 colorOuter = vec3(0.85, 0.04, 0.0) * texColor.rgb;
+      
+      float mixFactor = smoothstep(0.12, 0.78, n1 + n2 * 0.28);
       vec3 color = mix(colorOuter, colorMid, mixFactor);
-      color = mix(color, colorCore, smoothstep(0.45, 0.85, n1));
-      float flare = smoothstep(0.72, 0.95, n2);
-      color += vec3(1.0, 0.95, 0.8) * flare * 0.7;
+      color = mix(color, colorCore, smoothstep(0.42, 0.88, n1));
+      
+      float flare = smoothstep(0.70, 0.96, n2);
+      color += vec3(1.0, 0.98, 0.85) * flare * 0.75;
+      
       float rim = 1.0 - max(0.0, dot(vNormal, vec3(0.0, 0.0, 1.0)));
-      rim = pow(rim, 3.5);
-      color += vec3(1.0, 0.4, 0.0) * rim * 1.8;
+      rim = pow(rim, 3.8);
+      color += vec3(1.0, 0.45, 0.0) * rim * 2.0;
       gl_FragColor = vec4(color, 1.0);
     }
   `
@@ -121,41 +189,50 @@ const earthShaders = {
     varying vec3 vWorldPosition;
     varying vec2 vUv;
     uniform sampler2D tDiffuse;
-    uniform sampler2D tClouds;
+    uniform sampler2D tCityLights;
+    uniform sampler2D tWater;
+    uniform sampler2D tTopology;
     uniform vec3 uSunPosition;
     uniform float time;
     ${noiseGLSL}
     void main() {
       vec3 lightDir = normalize(uSunPosition - vWorldPosition);
       vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+      
+      // Calculate bumped normal using topology heightmap
       vec3 normal = normalize(vWorldNormal);
+      float heightCenter = texture2D(tTopology, vUv).r;
+      float heightRight = texture2D(tTopology, vUv + vec2(0.001, 0.0)).r;
+      float heightTop = texture2D(tTopology, vUv + vec2(0.0, 0.001)).r;
+      vec3 bumpNormal = normalize(normal + 0.04 * vec3(heightCenter - heightRight, heightCenter - heightTop, 0.0));
+      
       vec4 dayTex = texture2D(tDiffuse, vUv);
       vec3 dayColor = dayTex.rgb;
-      bool isOcean = dayColor.b > 0.35 && dayColor.r < 0.25;
-      vec3 pForNoise = vWorldPosition * 20.0;
-      float detailNoise = fbm(pForNoise);
-      if (!isOcean) {
-        dayColor *= 0.68 + 0.45 * detailNoise;
-      } else {
-        dayColor *= 0.85;
-      }
-      float spec = 0.0;
-      if (isOcean) {
-        vec3 halfDir = normalize(lightDir + viewDir);
-        spec = pow(max(0.0, dot(normal, halfDir)), 48.0) * 1.5;
-      }
-      float diffuse = dot(normal, lightDir);
+      
+      // Sample water specular mask
+      float waterVal = texture2D(tWater, vUv).r;
+      
+      // Specular ocean reflections
+      vec3 halfDir = normalize(lightDir + viewDir);
+      float spec = pow(max(0.0, dot(bumpNormal, halfDir)), 48.0) * waterVal * 1.8;
+      
+      float diffuse = dot(bumpNormal, lightDir);
       float dayFactor = smoothstep(-0.15, 0.15, diffuse);
-      float cityNoise = step(0.65, fbm(vWorldPosition * 85.0 + vec3(12.0)));
-      float isLandVal = isOcean ? 0.0 : 1.0;
-      vec3 cityLightsColor = vec3(1.0, 0.72, 0.32) * cityNoise * isLandVal * 2.5;
-      vec3 nightColor = vec3(0.003, 0.006, 0.012) + cityLightsColor;
-      vec2 cloudUv = vUv + vec2(time * 0.0018, 0.0);
-      vec4 cloudTex = texture2D(tClouds, cloudUv);
-      vec3 cloudColor = cloudTex.rgb * max(diffuse, 0.0);
-      float cloudAlpha = cloudTex.a;
-      vec3 baseTerrain = mix(nightColor, dayColor * (max(diffuse, 0.0) + 0.05) + vec3(0.85, 0.92, 1.0) * spec, dayFactor);
-      vec3 finalColor = mix(baseTerrain, cloudColor, cloudAlpha * dayFactor * 0.88);
+      
+      // Sample twinkling city lights
+      vec4 cityTex = texture2D(tCityLights, vUv);
+      float twinkle = 0.82 + 0.18 * sin(time * 4.0 + vWorldPosition.x * 12.0);
+      vec3 cityLightsColor = cityTex.rgb * twinkle * 2.6;
+      vec3 nightColor = vec3(0.002, 0.004, 0.008) + cityLightsColor;
+      
+      // Earth atmosphere scatter rim glow (blue marble haze)
+      float rim = 1.0 - max(0.0, dot(vNormal, vec3(0.0, 0.0, 1.0)));
+      rim = pow(rim, 3.5);
+      vec3 atmosGlow = vec3(0.35, 0.65, 1.0) * rim * 1.2 * max(diffuse, 0.0);
+      
+      vec3 terrainColor = dayColor * (max(diffuse, 0.0) + 0.05) + vec3(0.8, 0.9, 1.0) * spec;
+      vec3 finalColor = mix(nightColor, terrainColor, dayFactor) + atmosGlow;
+      
       gl_FragColor = vec4(finalColor, 1.0);
     }
   `
@@ -182,88 +259,153 @@ const jupiterShaders = {
     varying vec2 vUv;
     uniform float time;
     uniform vec3 uSunPosition;
+    uniform sampler2D uTexture;
     ${noiseGLSL}
     void main() {
       vec3 lightDir = normalize(uSunPosition - vWorldPosition);
       vec3 normal = normalize(vWorldNormal);
       float diffuse = max(dot(normal, lightDir), 0.0);
+      
+      // Animate bands moving at different speeds depending on latitude (y coordinate)
       vec2 uv = vUv;
-      float distortion = fbm(vec3(uv * 12.0, time * 0.12)) * 0.06;
-      float bandCoord = uv.y * 7.5 + distortion;
-      float bandNoise = fbm(vec3(uv.x * 2.2, bandCoord, time * 0.04));
-      vec3 colDark = vec3(0.5, 0.32, 0.18);
-      vec3 colLight = vec3(0.9, 0.8, 0.7);
-      vec3 colRed = vec3(0.68, 0.22, 0.08);
-      float bandVal = sin(bandCoord * 3.14159) * 0.5 + 0.5;
-      vec3 color = mix(colDark, colLight, bandVal);
-      color = mix(color, colRed, bandNoise * 0.42);
-      vec2 spotCenter = vec2(0.38, 0.34);
+      float bandSpeed = sin(uv.y * 12.0) * 0.012;
+      uv.x += time * bandSpeed;
+      
+      // Add fine turbulent noise distortion to simulate gas storms
+      float turbulence = fbm(vec3(uv * 18.0, time * 0.08)) * 0.015;
+      uv.x += turbulence;
+      uv.y += turbulence;
+      
+      // Great Red Spot vortex swirl
+      vec2 spotCenter = vec2(0.62, 0.30); // Center of the GRS on the texture
       vec2 d = uv - spotCenter;
+      // Handle UV wrapping
       if (d.x > 0.5) d.x -= 1.0;
       if (d.x < -0.5) d.x += 1.0;
-      vec2 ovalD = d * vec2(1.6, 1.0);
+      
+      vec2 ovalD = d * vec2(1.8, 1.0);
       float dist = length(ovalD);
-      if (dist < 0.08) {
-        float factor = 1.0 - dist / 0.08;
-        float angle = factor * 4.8 - time * 0.7;
-        float s = sin(angle);
-        float c = cos(angle);
-        vec2 rotD = vec2(ovalD.x * c - ovalD.y * s, ovalD.x * s + ovalD.y * c);
-        float stormLines = sin(length(rotD) * 75.0 + time * 2.5) * 0.5 + 0.5;
-        vec3 spotColor = mix(vec3(0.55, 0.08, 0.04), vec3(0.8, 0.28, 0.12), stormLines);
-        color = mix(color, spotColor, smoothstep(0.08, 0.065, dist));
+      if (dist < 0.065) {
+        float swirl = (1.0 - dist / 0.065) * 4.8 - time * 0.6;
+        float s = sin(swirl);
+        float c = cos(swirl);
+        vec2 rotD = vec2(d.x * c - d.y * s, d.x * s + d.y * c);
+        uv = spotCenter + rotD;
       }
-      float fresnel = pow(1.0 - max(0.0, dot(vNormal, vec3(0.0, 0.0, 1.0))), 3.0);
-      color += vec3(0.82, 0.68, 0.52) * fresnel * 0.28;
-      gl_FragColor = vec4(color * (diffuse + 0.08), 1.0);
+      
+      vec4 texColor = texture2D(uTexture, uv);
+      
+      // Fresnel limb darkening
+      float fresnel = pow(1.0 - max(0.0, dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.5);
+      vec3 finalColor = texColor.rgb * (diffuse + 0.06);
+      finalColor += vec3(0.85, 0.72, 0.55) * fresnel * 0.25 * diffuse;
+      
+      gl_FragColor = vec4(finalColor, 1.0);
     }
   `
 };
 
-const skyboxShaders = {
-  vertexShader: `
-    varying vec3 vWorldPosition;
-    void main() {
-      vWorldPosition = position;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    varying vec3 vWorldPosition;
-    uniform float time;
-    ${noiseGLSL}
-    void main() {
-      vec3 dir = normalize(vWorldPosition);
-      vec3 starColor = vec3(0.0);
-      float starDensity = 0.9965;
-      float h = hash(dir.xy * 1400.0 + dir.z * 700.0);
-      if (h > starDensity) {
-        float brightness = pow((h - starDensity) / (1.0 - starDensity), 4.5);
-        brightness *= 0.45 + 0.55 * sin(time * 3.5 + h * 12.0);
-        vec3 starTemp = mix(vec3(0.72, 0.85, 1.0), vec3(1.0, 0.88, 0.78), hash(h));
-        starColor = starTemp * brightness * 1.8;
+const saturnShaders = {
+  body: {
+    vertexShader: `
+      varying vec3 vNormal;
+      varying vec3 vWorldNormal;
+      varying vec3 vWorldPosition;
+      varying vec3 vLocalPosition;
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        vNormal = normalize(normalMatrix * normal);
+        vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+        vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+        vLocalPosition = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }
-      float band = dot(dir, normalize(vec3(1.0, 1.3, 0.45)));
-      float bandGlow = exp(-band*band * 12.0);
-      float dust = fbm(dir * 4.5 + vec3(0.0, time * 0.008, 0.0));
-      float dustLane = smoothstep(0.25, 0.65, fbm(dir * 10.0));
-      vec3 bandCol = mix(vec3(0.05, 0.015, 0.08), vec3(0.18, 0.09, 0.07), dust);
-      bandCol = mix(bandCol, vec3(0.008, 0.0, 0.018), dustLane);
-      float neb1 = fbm(dir * 2.8 + vec3(15.0));
-      float neb2 = fbm(dir * 1.8 - vec3(0.0, 0.0, time * 0.004));
-      vec3 nebCol = mix(vec3(0.0), vec3(0.018, 0.004, 0.038), neb1);
-      nebCol += mix(vec3(0.0), vec3(0.004, 0.012, 0.018), neb2);
-      vec3 finalBg = starColor + bandGlow * bandCol + nebCol;
-      gl_FragColor = vec4(finalBg, 1.0);
-    }
-  `
+    `,
+    fragmentShader: `
+      varying vec3 vNormal;
+      varying vec3 vWorldNormal;
+      varying vec3 vWorldPosition;
+      varying vec3 vLocalPosition;
+      varying vec2 vUv;
+      uniform sampler2D map;
+      uniform sampler2D tRingMap;
+      uniform vec3 uLocalSunPos;
+      void main() {
+        vec4 bodyColor = texture2D(map, vUv);
+        vec3 normal = normalize(vWorldNormal);
+        vec3 lightDir = normalize(vec3(0.0) - vWorldPosition);
+        float diffuse = max(dot(normal, lightDir), 0.0);
+        
+        // Analytical Ring Shadow cast onto Saturn's sphere
+        vec3 P = vLocalPosition;
+        vec3 d = normalize(uLocalSunPos - P);
+        float shadow = 1.0;
+        
+        if (abs(d.y) > 0.0001) {
+          float t = -P.y / d.y;
+          if (t > 0.0) {
+            vec3 I = P + t * d;
+            float r = length(I.xz);
+            if (r >= 3.8 && r <= 6.8) {
+              float ringU = (r - 3.8) / (6.8 - 3.8);
+              float ringAlpha = texture2D(tRingMap, vec2(ringU, 0.5)).a;
+              shadow = 1.0 - ringAlpha * 0.82;
+            }
+          }
+        }
+        
+        vec3 finalColor = bodyColor.rgb * (diffuse * shadow + 0.05);
+        gl_FragColor = vec4(finalColor, 1.0);
+      }
+    `
+  },
+  ring: {
+    vertexShader: `
+      varying vec3 vPosition;
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        vPosition = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vPosition;
+      varying vec2 vUv;
+      uniform sampler2D map;
+      uniform vec3 uLocalSunPos;
+      void main() {
+        vec4 ringColor = texture2D(map, vUv);
+        if (ringColor.a < 0.05) discard;
+        
+        // Analytical Saturn body shadow cast onto the Ring plane
+        vec3 P = vPosition;
+        float R = 2.8; // Saturn body radius
+        vec3 d = normalize(uLocalSunPos - P);
+        float PdotD = dot(P, d);
+        float disc = PdotD * PdotD - (dot(P, P) - R * R);
+        float shadow = 1.0;
+        
+        if (disc >= 0.0) {
+          float t = -PdotD - sqrt(disc);
+          if (t > 0.0) {
+            // Dark shadows with soft penumbra edge
+            shadow = smoothstep(0.0, 0.35, t) * 0.12;
+          }
+        }
+        
+        gl_FragColor = vec4(ringColor.rgb * shadow, ringColor.a);
+      }
+    `
+  }
 };
 
 export default function PlanetScene({ loaded }: PlanetSceneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
-  // HUD element refs for high-frequency direct DOM manipulation
+  // HUD element refs
   const hudContainerRef = useRef<HTMLDivElement>(null);
   const hudCoordsRef = useRef<HTMLDivElement>(null);
   const hudSpeedRef = useRef<HTMLDivElement>(null);
@@ -271,7 +413,6 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
   const hudScanDataRef = useRef<HTMLDivElement>(null);
   const hudWarnRef = useRef<HTMLDivElement>(null);
   const hudProgressRef = useRef<SVGCircleElement>(null);
-  const hudActivePlanetInfoRef = useRef<HTMLDivElement>(null);
   
   const [selectedPlanet, setSelectedPlanet] = useState<any | null>(null);
   const [webglError, setWebglError] = useState(false);
@@ -286,7 +427,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
 
     // --- LENIS SETUP ---
     const lenis = new Lenis({
-      lerp: 0.06, // even smoother easing
+      lerp: 0.05,
       infinite: false,
       smoothWheel: true,
     });
@@ -315,7 +456,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       return;
     }
 
-    // Enable high-end render features
+    // Enable high-end render settings
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
@@ -327,6 +468,20 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
 
     const disposables: { dispose: () => void }[] = [];
     const addDisposable = (obj: any) => { if (obj && obj.dispose) disposables.push(obj); return obj; };
+
+    // --- EFFECT COMPOSER POST-PROCESSING ---
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    
+    // Volumetric space bloom pass
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.48,  // Strength
+      0.35,  // Radius
+      0.82   // Threshold (only glowing sun/corona/atmosphere shells bloom)
+    );
+    composer.addPass(bloomPass);
+    composer.addPass(new OutputPass());
 
     // --- TEXTURE GENERATORS ---
     const createTexture = (w: number, h: number, drawFn: (ctx: CanvasRenderingContext2D) => void) => {
@@ -351,170 +506,58 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       ctx.putImageData(imgData, 0, 0);
     };
 
-    // --- GENERATE DETAILED MAPS ---
-    const texSun = createTexture(512, 512, ctx => {
-      const grad = ctx.createRadialGradient(256, 256, 0, 256, 256, 256);
-      grad.addColorStop(0, '#FFFCE0');
-      grad.addColorStop(0.5, '#FF7700');
-      grad.addColorStop(1, '#FF1100');
-      ctx.fillStyle = grad; ctx.fillRect(0, 0, 512, 512);
-      drawNoise(ctx, 512, 512, 10);
+    // --- TEXTURE LOADER & REAL textures ---
+    const textureLoader = new THREE.TextureLoader();
+    const loadTexture = (path: string) => {
+      const tex = textureLoader.load(path);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      addDisposable(tex);
+      return tex;
+    };
+
+    // Glow sprite texture generator
+    const texGlow = createTexture(64, 64, ctx => {
+      const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+      grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 64, 64);
     });
 
-    const texMercury = createTexture(512, 512, ctx => {
-      ctx.fillStyle = '#6E6E6E'; ctx.fillRect(0, 0, 512, 512);
-      ctx.fillStyle = '#5A5A5A';
-      for (let i = 0; i < 60; i++) {
-        ctx.fillStyle = `rgba(${50 + Math.random() * 20}, ${50 + Math.random() * 20}, ${50 + Math.random() * 20}, 0.45)`;
-        ctx.beginPath(); ctx.arc(Math.random() * 512, Math.random() * 512, Math.random() * 20 + 4, 0, Math.PI * 2); ctx.fill();
-      }
-      drawNoise(ctx, 512, 512, 45);
-    });
-
-    const texMercuryBump = createTexture(512, 512, ctx => {
-      ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, 512, 512);
-      for (let i = 0; i < 60; i++) {
-        const x = Math.random() * 512;
-        const y = Math.random() * 512;
-        const r = Math.random() * 15 + 3;
-        const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
-        grad.addColorStop(0, '#000000');
-        grad.addColorStop(0.8, '#505050');
-        grad.addColorStop(0.95, '#ffffff');
-        grad.addColorStop(1, '#808080');
-        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-      }
-    });
-
-    const texVenus = createTexture(512, 512, ctx => {
-      const grad = ctx.createLinearGradient(0, 0, 0, 512);
-      ['#E6BA80', '#C29862', '#E6BA80', '#D4A870', '#E6BA80'].forEach((c, i) => grad.addColorStop(i / 4, c));
-      ctx.fillStyle = grad; ctx.fillRect(0, 0, 512, 512);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-      for (let i = 0; i < 15; i++) {
-        ctx.beginPath(); ctx.ellipse(Math.random() * 512, Math.random() * 512, Math.random() * 100 + 40, Math.random() * 20 + 8, Math.random() * 0.5 - 0.25, 0, Math.PI * 2); ctx.fill();
-      }
-      drawNoise(ctx, 512, 512, 12);
-    });
-
-    const texEarth = createTexture(1024, 512, ctx => {
-      ctx.fillStyle = '#0f2b5c'; ctx.fillRect(0, 0, 1024, 512);
-      ctx.fillStyle = '#22543d';
-      const drawContinent = (x: number, y: number, sx: number, sy: number) => {
-        ctx.beginPath(); ctx.ellipse(x, y, sx, sy, Math.random() * Math.PI, 0, Math.PI * 2); ctx.fill();
-        for (let i = 0; i < 6; i++) {
-          ctx.beginPath(); ctx.ellipse(x + (Math.random() - 0.5) * sx, y + (Math.random() - 0.5) * sy, sx * 0.4, sy * 0.4, Math.random() * Math.PI, 0, Math.PI * 2); ctx.fill();
-        }
-      };
-      drawContinent(250, 200, 120, 140);
-      drawContinent(380, 360, 80, 110);
-      drawContinent(560, 240, 95, 125);
-      drawContinent(760, 210, 160, 110);
-      drawContinent(850, 370, 65, 55);
-      drawNoise(ctx, 1024, 512, 10);
-    });
+    const texSun = loadTexture('/2k_sun.jpg');
+    const texMercury = loadTexture('/2k_mercury.jpg');
+    const texVenus = loadTexture('/2k_venus.jpg');
+    const texEarth = loadTexture('/2k_earth_daymap.jpg');
+    const texEarthCityLights = loadTexture('/2k_earth_night.jpg');
+    const texEarthTopology = loadTexture('/2k_earth_topology.png');
+    const texEarthWater = loadTexture('/2k_earth_water.png');
 
     const texEarthClouds = createTexture(1024, 512, ctx => {
       ctx.clearRect(0, 0, 1024, 512);
-      const grad = ctx.createLinearGradient(0, 0, 1024, 0);
-      grad.addColorStop(0, 'rgba(255,255,255,0)');
-      grad.addColorStop(0.3, 'rgba(255,255,255,0.72)');
-      grad.addColorStop(0.5, 'rgba(255,255,255,0.1)');
-      grad.addColorStop(0.7, 'rgba(255,255,255,0.8)');
-      grad.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = grad;
-      for (let i = 0; i < 28; i++) {
-        ctx.beginPath(); ctx.ellipse(Math.random() * 1024, Math.random() * 512, Math.random() * 140 + 40, Math.random() * 30 + 10, Math.random() * 0.6 - 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+      for (let i = 0; i < 40; i++) {
+        ctx.beginPath(); ctx.ellipse(Math.random() * 1024, Math.random() * 512, Math.random() * 160 + 50, Math.random() * 35 + 12, Math.random() * 0.5 - 0.25, 0, Math.PI * 2); ctx.fill();
       }
-      drawNoise(ctx, 1024, 512, 15);
+      const drawNoiseLocal = (ctx: CanvasRenderingContext2D, w: number, h: number, amount: number) => {
+        const imgData = ctx.getImageData(0, 0, w, h);
+        for (let i = 0; i < imgData.data.length; i += 4) {
+          const noise = (Math.random() - 0.5) * amount;
+          imgData.data[i] = Math.max(0, Math.min(255, imgData.data[i] + noise));
+          imgData.data[i + 1] = Math.max(0, Math.min(255, imgData.data[i + 1] + noise));
+          imgData.data[i + 2] = Math.max(0, Math.min(255, imgData.data[i + 2] + noise));
+        }
+        ctx.putImageData(imgData, 0, 0);
+      };
+      drawNoiseLocal(ctx, 1024, 512, 12);
     });
 
-    const texMars = createTexture(512, 512, ctx => {
-      const grad = ctx.createLinearGradient(0, 0, 0, 512);
-      grad.addColorStop(0, '#FFF0EB');
-      grad.addColorStop(0.1, '#B84514');
-      grad.addColorStop(0.4, '#99330B');
-      grad.addColorStop(0.7, '#A83B0E');
-      grad.addColorStop(0.9, '#B84514');
-      grad.addColorStop(1, '#FFF0EB');
-      ctx.fillStyle = grad; ctx.fillRect(0, 0, 512, 512);
-      ctx.fillStyle = 'rgba(60, 15, 5, 0.4)';
-      ctx.beginPath(); ctx.ellipse(280, 260, 130, 20, 0.15, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(120, 240, 22, 0, Math.PI * 2); ctx.fill();
-      drawNoise(ctx, 512, 512, 25);
-    });
+    const texMars = loadTexture('/2k_mars.jpg');
+    const texSaturn = loadTexture('/2k_saturn.jpg');
+    const texSaturnRings = loadTexture('/2k_saturn_ring.png');
+    const texUranus = loadTexture('/2k_uranus.jpg');
+    const texNeptune = loadTexture('/2k_neptune.jpg');
 
-    const texMarsBump = createTexture(512, 512, ctx => {
-      ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, 512, 512);
-      ctx.fillStyle = '#000000';
-      ctx.beginPath(); ctx.ellipse(280, 260, 130, 20, 0.15, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath(); ctx.arc(120, 240, 22, 0, Math.PI * 2); ctx.fill();
-    });
-
-    const texSaturn = createTexture(512, 512, ctx => {
-      const bands = ['#E4D191', '#D4C181', '#E8D49A', '#C8B676', '#E4D191', '#C5B373', '#E8D49A'];
-      const grad = ctx.createLinearGradient(0, 0, 0, 512);
-      bands.forEach((c, i) => grad.addColorStop(i / (bands.length - 1), c));
-      ctx.fillStyle = grad; ctx.fillRect(0, 0, 512, 512);
-      drawNoise(ctx, 512, 512, 10);
-    });
-
-    const texSaturnRings = createTexture(1024, 128, ctx => {
-      ctx.clearRect(0, 0, 1024, 128);
-      const grad = ctx.createLinearGradient(0, 0, 1024, 0);
-      grad.addColorStop(0, 'rgba(0,0,0,0)');
-      grad.addColorStop(0.12, 'rgba(215,195,130,0.05)');
-      grad.addColorStop(0.25, 'rgba(228,210,145,0.7)');
-      grad.addColorStop(0.48, 'rgba(212,193,129,0.3)');
-      grad.addColorStop(0.68, 'rgba(150,135,90,0.8)');
-      grad.addColorStop(0.72, 'rgba(0,0,0,0.95)'); // Cassini Division
-      grad.addColorStop(0.75, 'rgba(212,193,129,0.55)');
-      grad.addColorStop(0.95, 'rgba(180,162,100,0.15)');
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = grad; ctx.fillRect(0, 0, 1024, 128);
-      drawNoise(ctx, 1024, 128, 18);
-    });
-
-    const texUranus = createTexture(512, 512, ctx => {
-      const grad = ctx.createLinearGradient(0, 0, 0, 512);
-      grad.addColorStop(0, '#B2ECEC'); grad.addColorStop(0.5, '#8BE2E2'); grad.addColorStop(1, '#62CECE');
-      ctx.fillStyle = grad; ctx.fillRect(0, 0, 512, 512);
-      drawNoise(ctx, 512, 512, 5);
-    });
-
-    const texNeptune = createTexture(512, 512, ctx => {
-      ctx.fillStyle = '#214AE6'; ctx.fillRect(0, 0, 512, 512);
-      ctx.fillStyle = '#11299C';
-      ctx.beginPath(); ctx.ellipse(300, 280, 48, 25, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.22)';
-      ctx.fillRect(80, 120, 120, 3);
-      ctx.fillRect(320, 380, 90, 2.5);
-      drawNoise(ctx, 512, 512, 10);
-    });
-
-    const texGlow = createTexture(128, 128, ctx => {
-      const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-      grad.addColorStop(0, 'rgba(255,255,255,1)');
-      grad.addColorStop(0.18, 'rgba(255,255,255,0.85)');
-      grad.addColorStop(0.45, 'rgba(255,255,255,0.25)');
-      grad.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = grad; ctx.fillRect(0, 0, 128, 128);
-    });
-
-    // --- INFINITE BACKGROUND SKYBOX ---
-    const skyboxGeo = addDisposable(new THREE.SphereGeometry(950, 32, 32));
-    const skyboxMat = addDisposable(new THREE.ShaderMaterial({
-      uniforms: { time: { value: 0 } },
-      vertexShader: skyboxShaders.vertexShader,
-      fragmentShader: skyboxShaders.fragmentShader,
-      side: THREE.BackSide,
-      depthWrite: false
-    }));
-    const skybox = new THREE.Mesh(skyboxGeo, skyboxMat);
-    scene.add(skybox);
-
-    // --- COOP-LAYER SPACE DUST ---
+    // --- INFINITE SPACE DUST ---
     const dustCount = 800;
     const dustGeo = addDisposable(new THREE.BufferGeometry());
     const dustOffsets = new Float32Array(dustCount * 3);
@@ -538,7 +581,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     const spaceDust = new THREE.Points(dustGeo, dustMat);
     scene.add(spaceDust);
 
-    // --- WARP PARTICLES ---
+    // --- WARP TRANSITION STREAKS ---
     const warpGeo = addDisposable(new THREE.BufferGeometry());
     const warpPos = new Float32Array(600 * 3);
     for (let i = 0; i < 600 * 3; i++) warpPos[i] = (Math.random() - 0.5) * 60;
@@ -553,30 +596,41 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     const warpSystem = new THREE.Points(warpGeo, warpMat);
     scene.add(warpSystem);
 
-    // --- LIGHTING ---
+    // --- SPACE SHADER BACKDROP ---
+    const skyboxGeo = addDisposable(new THREE.SphereGeometry(950, 32, 32));
+    const skyboxMat = addDisposable(new THREE.ShaderMaterial({
+      uniforms: { time: { value: 0 } },
+      vertexShader: skyboxShaders.vertexShader,
+      fragmentShader: skyboxShaders.fragmentShader,
+      side: THREE.BackSide,
+      depthWrite: false
+    }));
+    const skybox = new THREE.Mesh(skyboxGeo, skyboxMat);
+    scene.add(skybox);
+
+    // --- LIGHTING ENVIRONMENT ---
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.04);
     scene.add(ambientLight);
     
     // Core Sun light source
-    const sunLight = new THREE.PointLight(0xffffff, 4.2, 1200);
+    const sunLight = new THREE.PointLight(0xffffff, 4.5, 1200);
     sunLight.position.set(0, 0, 0);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
     sunLight.shadow.mapSize.height = 2048;
     sunLight.shadow.bias = -0.0005;
     sunLight.shadow.camera.near = 5;
-    sunLight.shadow.camera.far = 400;
+    sunLight.shadow.camera.far = 450;
     scene.add(sunLight);
 
-    // Dynamic camera-tracking fill light to simulate ambient scattering on dark sides
     const fillLight = new THREE.DirectionalLight(0x93C5FD, 0.18);
     scene.add(fillLight);
 
-    // --- PLANETS SETUP ---
+    // --- PLANETS & ATMOSPHERES SETUP ---
     const planets: Record<string, THREE.Mesh | THREE.Group> = {};
     const interactableMeshes: THREE.Mesh[] = [];
 
-    // Helper to generate atmospheric scattering shells
+    // Helper to generate atmospheric scattering shells (BackSide volumetric glow)
     const createAtmosphereMaterial = (color: THREE.Color, intensity: number, powVal: number) => {
       return addDisposable(new THREE.ShaderMaterial({
         uniforms: {
@@ -603,32 +657,35 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
           uniform float uPower;
           void main() {
             vec3 lightDir = normalize(uSunPosition - vWorldPosition);
+            // Volumetric backface glow
             float fresnel = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), uPower);
             float lit = dot(vNormal, lightDir);
-            float scatter = fresnel * uIntensity * smoothstep(-0.2, 0.3, lit);
+            float scatter = fresnel * uIntensity * smoothstep(-0.25, 0.25, lit);
             gl_FragColor = vec4(uColor, scatter);
           }
         `,
         transparent: true,
         blending: THREE.AdditiveBlending,
-        side: THREE.FrontSide,
+        side: THREE.BackSide,
         depthWrite: false
       }));
     };
 
-    // 1. SUN (Custom Shader)
+    // 1. SUN
     const sunGeo = addDisposable(new THREE.SphereGeometry(6, 64, 64));
     const sunMat = addDisposable(new THREE.ShaderMaterial({
-      uniforms: { time: { value: 0 } },
+      uniforms: {
+        time: { value: 0 },
+        uTexture: { value: texSun }
+      },
       vertexShader: sunShaders.vertexShader,
       fragmentShader: sunShaders.fragmentShader
     }));
     const sun = new THREE.Mesh(sunGeo, sunMat);
-    sun.position.set(0, 0, 0);
     scene.add(sun);
     planets['Sun'] = sun;
     interactableMeshes.push(sun);
-
+ 
     // Sun Volumetric Corona Glow
     [15, 22, 34, 52].forEach((size, i) => {
       const glowMat = addDisposable(new THREE.SpriteMaterial({
@@ -642,29 +699,14 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       sprite.scale.set(size, size, 1);
       sun.add(sprite);
     });
-
-    // God rays
-    for (let i = 0; i < 15; i++) {
-      const rayGeo = addDisposable(new THREE.PlaneGeometry(0.12, 22));
-      const rayMat = addDisposable(new THREE.MeshBasicMaterial({
-        color: 0xFF8800,
-        transparent: true,
-        opacity: 0.045,
-        blending: THREE.AdditiveBlending,
-        side: THREE.DoubleSide
-      }));
-      const ray = new THREE.Mesh(rayGeo, rayMat);
-      ray.rotation.z = (Math.PI / 15) * i;
-      sun.add(ray);
-    }
-
-    // 2. MERCURY (Standard Material PBR + Atmosphere)
+ 
+    // 2. MERCURY (Low segment far, high near - lod balance)
     const mercury = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(0.5, 64, 64)),
+      addDisposable(new THREE.SphereGeometry(0.5, 48, 48)),
       addDisposable(new THREE.MeshStandardMaterial({
         map: texMercury,
-        bumpMap: texMercuryBump,
-        bumpScale: 0.015,
+        bumpMap: texMercury,
+        bumpScale: 0.008,
         roughness: 0.88,
         metalness: 0.1
       }))
@@ -675,12 +717,14 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     scene.add(mercury);
     planets['Mercury'] = mercury;
     interactableMeshes.push(mercury);
-
-    // 3. VENUS (Standard Material PBR + Yellow Scattering)
+ 
+    // 3. VENUS
     const venus = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(1.2, 64, 64)),
+      addDisposable(new THREE.SphereGeometry(1.2, 48, 48)),
       addDisposable(new THREE.MeshStandardMaterial({
         map: texVenus,
+        bumpMap: texVenus,
+        bumpScale: 0.004,
         roughness: 0.9,
         metalness: 0.0
       }))
@@ -691,20 +735,22 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     scene.add(venus);
     planets['Venus'] = venus;
     interactableMeshes.push(venus);
-
-    // Venus atmospheric glow
+ 
+    // Venus atmosphere shell
     const vAtmos = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(1.23, 64, 64)),
-      createAtmosphereMaterial(new THREE.Color('#E8C66A'), 0.45, 1.8)
+      addDisposable(new THREE.SphereGeometry(1.26, 48, 48)),
+      createAtmosphereMaterial(new THREE.Color('#E8C66A'), 0.45, 2.0)
     );
     venus.add(vAtmos);
-
-    // 4. EARTH (Custom day/night, spec, city lights shader + Atmosphere + clouds)
-    const earthGeo = addDisposable(new THREE.SphereGeometry(1.3, 64, 64));
+ 
+    // 4. EARTH (PBR + custom shader for day/night city lights, elevation bump, water specular, and cloud shadows)
+    const earthGeo = addDisposable(new THREE.SphereGeometry(1.3, 48, 48));
     const earthMat = addDisposable(new THREE.ShaderMaterial({
       uniforms: {
         tDiffuse: { value: texEarth },
-        tClouds: { value: texEarthClouds },
+        tCityLights: { value: texEarthCityLights },
+        tWater: { value: texEarthWater },
+        tTopology: { value: texEarthTopology },
         uSunPosition: { value: new THREE.Vector3(0, 0, 0) },
         time: { value: 0 }
       },
@@ -718,21 +764,36 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     scene.add(earth);
     planets['Earth'] = earth;
     interactableMeshes.push(earth);
-
-    // Earth blue atmospheric scatter
+ 
+    // Earth blue atmosphere
     const eAtmos = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(1.35, 64, 64)),
-      createAtmosphereMaterial(new THREE.Color('#4FAAFF'), 0.55, 2.5)
+      addDisposable(new THREE.SphereGeometry(1.38, 48, 48)),
+      createAtmosphereMaterial(new THREE.Color('#4FAAFF'), 0.52, 2.5)
     );
     earth.add(eAtmos);
 
-    // 5. MARS (PBR + Atmos)
+    // Separate Earth clouds layer
+    const cloudGeo = addDisposable(new THREE.SphereGeometry(1.315, 48, 48));
+    const cloudMat = addDisposable(new THREE.MeshStandardMaterial({
+      alphaMap: texEarthClouds,
+      transparent: true,
+      color: 0xffffff,
+      roughness: 0.9,
+      metalness: 0.0,
+      blending: THREE.NormalBlending,
+      depthWrite: false
+    }));
+    const earthClouds = new THREE.Mesh(cloudGeo, cloudMat);
+    earthClouds.castShadow = true;
+    earth.add(earthClouds);
+ 
+    // 5. MARS
     const mars = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(0.7, 64, 64)),
+      addDisposable(new THREE.SphereGeometry(0.7, 48, 48)),
       addDisposable(new THREE.MeshStandardMaterial({
         map: texMars,
-        bumpMap: texMarsBump,
-        bumpScale: 0.016,
+        bumpMap: texMars,
+        bumpScale: 0.012,
         roughness: 0.85,
         metalness: 0.05
       }))
@@ -743,42 +804,66 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     scene.add(mars);
     planets['Mars'] = mars;
     interactableMeshes.push(mars);
-
-    // Mars thin red atmospheric scatter
+ 
+    // Mars atmosphere shell
     const mAtmos = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(0.725, 64, 64)),
-      createAtmosphereMaterial(new THREE.Color('#FF5522'), 0.35, 3.2)
+      addDisposable(new THREE.SphereGeometry(0.74, 48, 48)),
+      createAtmosphereMaterial(new THREE.Color('#FF5522'), 0.32, 3.2)
     );
     mars.add(mAtmos);
-
-    // 6. ASTEROID BELT (Separated rings)
-    const asteroidCount = 2000;
-    const astGeo = addDisposable(new THREE.BufferGeometry());
-    const astPos = new Float32Array(asteroidCount * 3);
+ 
+    // 6. INSTANCED 3D ASTEROID BELT (Awwwards optimization - 1 draw call!)
+    const asteroidCount = 1200;
+    // Create random displaced rock geometries
+    const rockGeo = addDisposable(new THREE.DodecahedronGeometry(0.08, 1));
+    const rockPosAttr = rockGeo.attributes.position;
+    for (let i = 0; i < rockPosAttr.count; i++) {
+      const x = rockPosAttr.getX(i);
+      const y = rockPosAttr.getY(i);
+      const z = rockPosAttr.getZ(i);
+      const deform = 0.75 + Math.random() * 0.5;
+      rockPosAttr.setXYZ(i, x * deform, y * deform, z * deform);
+    }
+    rockGeo.computeVertexNormals();
+ 
+    const rockMat = addDisposable(new THREE.MeshStandardMaterial({
+      color: 0x7E7E7E,
+      roughness: 0.9,
+      metalness: 0.1
+    }));
+ 
+    const asteroidBelt = new THREE.InstancedMesh(rockGeo, rockMat, asteroidCount);
+    asteroidBelt.position.set(0, 0, -190);
+    asteroidBelt.castShadow = true;
+    asteroidBelt.receiveShadow = true;
+    
+    // Position instances along orbital rings
+    const dummy = new THREE.Object3D();
     for (let i = 0; i < asteroidCount; i++) {
       const angle = Math.random() * Math.PI * 2;
       const radius = 18 + Math.random() * 9;
-      astPos[i * 3] = Math.cos(angle) * radius;
-      astPos[i * 3 + 1] = (Math.random() - 0.5) * 4;
-      astPos[i * 3 + 2] = Math.sin(angle) * radius;
+      const x = Math.cos(angle) * radius;
+      const y = (Math.random() - 0.5) * 3.8;
+      const z = Math.sin(angle) * radius;
+      
+      dummy.position.set(x, y, z);
+      dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+      const s = 0.5 + Math.random() * 1.0;
+      dummy.scale.set(s, s, s);
+      dummy.updateMatrix();
+      asteroidBelt.setMatrixAt(i, dummy.matrix);
     }
-    astGeo.setAttribute('position', new THREE.BufferAttribute(astPos, 3));
-    const astMat = addDisposable(new THREE.PointsMaterial({
-      size: 0.12,
-      color: 0xA1A1AA,
-      transparent: true,
-      opacity: 0.65
-    }));
-    const asteroidBelt = new THREE.Points(astGeo, astMat);
-    asteroidBelt.position.set(0, 0, -190);
+    asteroidBelt.instanceMatrix.needsUpdate = true;
     scene.add(asteroidBelt);
-
-    // 7. JUPITER (Custom turbulent cloud band & red spot shader)
-    const jupGeo = addDisposable(new THREE.SphereGeometry(3.5, 64, 64));
+ 
+    // 7. JUPITER (swirling storms + bands)
+    const texJupiter = loadTexture('/2k_jupiter.jpg');
+    const jupGeo = addDisposable(new THREE.SphereGeometry(3.5, 54, 54));
     const jupMat = addDisposable(new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0 },
-        uSunPosition: { value: new THREE.Vector3(0, 0, 0) }
+        uSunPosition: { value: new THREE.Vector3(0, 0, 0) },
+        uTexture: { value: texJupiter }
       },
       vertexShader: jupiterShaders.vertexShader,
       fragmentShader: jupiterShaders.fragmentShader
@@ -790,30 +875,37 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     scene.add(jupiter);
     planets['Jupiter'] = jupiter;
     interactableMeshes.push(jupiter);
-
-    // Jupiter warm glow atmospheric scatter
+ 
+    // Jupiter atmosphere shell
     const jAtmos = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(3.55, 64, 64)),
-      createAtmosphereMaterial(new THREE.Color('#F59E0B'), 0.35, 2.2)
+      addDisposable(new THREE.SphereGeometry(3.7, 54, 54)),
+      createAtmosphereMaterial(new THREE.Color('#F59E0B'), 0.32, 2.2)
     );
     jupiter.add(jAtmos);
-
-    // 8. SATURN (PBR + Detailed ring system casting shadows)
+ 
+    // 8. SATURN (Custom analytical shadows)
     const saturnGroup = new THREE.Group();
     saturnGroup.position.set(0, 0, -290);
+    
+    // Saturn Body
     const saturnMesh = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(2.8, 64, 64)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        map: texSaturn,
-        roughness: 0.72,
-        metalness: 0.05
+      addDisposable(new THREE.SphereGeometry(2.8, 54, 54)),
+      addDisposable(new THREE.ShaderMaterial({
+        uniforms: {
+          map: { value: texSaturn },
+          tRingMap: { value: texSaturnRings },
+          uLocalSunPos: { value: new THREE.Vector3(0, 0, 290) }
+        },
+        vertexShader: saturnShaders.body.vertexShader,
+        fragmentShader: saturnShaders.body.fragmentShader
       }))
     );
     saturnMesh.userData = { name: 'Saturn', isHovered: false };
     saturnMesh.castShadow = true;
     saturnMesh.receiveShadow = true;
     saturnGroup.add(saturnMesh);
-
+ 
+    // Saturn Rings
     const ringGeo = addDisposable(new THREE.RingGeometry(3.8, 6.8, 128));
     const ringGeoPos = ringGeo.attributes.position;
     const ringGeoUvs = ringGeo.attributes.uv;
@@ -823,32 +915,43 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       const r = Math.sqrt(x * x + y * y);
       ringGeoUvs.setXY(i, (r - 3.8) / (6.8 - 3.8), 0.5);
     }
-    const ringMat = addDisposable(new THREE.MeshStandardMaterial({
-      map: texSaturnRings,
-      transparent: true,
-      side: THREE.DoubleSide,
-      depthWrite: true,
-      roughness: 0.65,
-      metalness: 0.1,
-      alphaTest: 0.05
-    }));
-    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    const ringMesh = new THREE.Mesh(
+      ringGeo,
+      addDisposable(new THREE.ShaderMaterial({
+        uniforms: {
+          map: { value: texSaturnRings },
+          uLocalSunPos: { value: new THREE.Vector3(0, 0, 290) }
+        },
+        vertexShader: saturnShaders.ring.vertexShader,
+        fragmentShader: saturnShaders.ring.fragmentShader,
+        transparent: true,
+        side: THREE.DoubleSide,
+        depthWrite: true
+      }))
+    );
     ringMesh.rotation.x = -Math.PI / 2;
-    ringMesh.castShadow = true;
-    ringMesh.receiveShadow = true;
     saturnGroup.add(ringMesh);
-    saturnGroup.rotation.z = 0.46; // Axial tilt
+    saturnGroup.rotation.z = 0.46; // tilt
     scene.add(saturnGroup);
     planets['Saturn'] = saturnGroup;
     interactableMeshes.push(saturnMesh);
-
-    // 9. URANUS (PBR + Rings + Atmos)
+ 
+    // Saturn atmosphere shell
+    const sAtmos = new THREE.Mesh(
+      addDisposable(new THREE.SphereGeometry(3.0, 54, 54)),
+      createAtmosphereMaterial(new THREE.Color('#E8D49A'), 0.3, 2.0)
+    );
+    saturnMesh.add(sAtmos);
+ 
+    // 9. URANUS
     const uranusGroup = new THREE.Group();
     uranusGroup.position.set(0, 0, -360);
     const uranusMesh = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(2.0, 64, 64)),
+      addDisposable(new THREE.SphereGeometry(2.0, 48, 48)),
       addDisposable(new THREE.MeshStandardMaterial({
         map: texUranus,
+        bumpMap: texUranus,
+        bumpScale: 0.005,
         roughness: 0.88,
         metalness: 0.0
       }))
@@ -857,7 +960,8 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     uranusMesh.castShadow = true;
     uranusMesh.receiveShadow = true;
     uranusGroup.add(uranusMesh);
-
+ 
+    // Uranus thin ring
     const uRing = new THREE.Mesh(
       addDisposable(new THREE.RingGeometry(2.5, 3.2, 64)),
       addDisposable(new THREE.MeshStandardMaterial({
@@ -870,22 +974,25 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     );
     uRing.rotation.x = Math.PI / 2;
     uranusGroup.add(uRing);
-    uranusGroup.rotation.z = 1.7; // Rotates on its side!
+    uranusGroup.rotation.z = 1.7; // rot side
     scene.add(uranusGroup);
     planets['Uranus'] = uranusGroup;
     interactableMeshes.push(uranusMesh);
-
+ 
+    // Uranus atmosphere shell
     const uAtmos = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(2.04, 64, 64)),
+      addDisposable(new THREE.SphereGeometry(2.14, 48, 48)),
       createAtmosphereMaterial(new THREE.Color('#93E3E3'), 0.42, 2.0)
     );
     uranusMesh.add(uAtmos);
-
-    // 10. NEPTUNE (PBR + Atmos)
+ 
+    // 10. NEPTUNE
     const neptune = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(1.9, 64, 64)),
+      addDisposable(new THREE.SphereGeometry(1.9, 48, 48)),
       addDisposable(new THREE.MeshStandardMaterial({
         map: texNeptune,
+        bumpMap: texNeptune,
+        bumpScale: 0.006,
         roughness: 0.85,
         metalness: 0.05
       }))
@@ -896,10 +1003,11 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     scene.add(neptune);
     planets['Neptune'] = neptune;
     interactableMeshes.push(neptune);
-
+ 
+    // Neptune atmosphere shell
     const nAtmos = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(1.94, 64, 64)),
-      createAtmosphereMaterial(new THREE.Color('#3B82F6'), 0.52, 2.1)
+      addDisposable(new THREE.SphereGeometry(2.02, 48, 48)),
+      createAtmosphereMaterial(new THREE.Color('#3B82F6'), 0.5, 2.0)
     );
     neptune.add(nAtmos);
 
@@ -993,13 +1101,23 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       if (jupMat.uniforms) jupMat.uniforms.time.value = time;
       if (skyboxMat.uniforms) skyboxMat.uniforms.time.value = time;
 
+      // Update local sun positions for analytical shadows
+      if (saturnMesh.material && (saturnMesh.material as THREE.ShaderMaterial).uniforms) {
+        const localSunPos = saturnMesh.worldToLocal(new THREE.Vector3(0, 0, 0));
+        (saturnMesh.material as THREE.ShaderMaterial).uniforms.uLocalSunPos.value.copy(localSunPos);
+      }
+      if (ringMesh.material && (ringMesh.material as THREE.ShaderMaterial).uniforms) {
+        const localSunPos = ringMesh.worldToLocal(new THREE.Vector3(0, 0, 0));
+        (ringMesh.material as THREE.ShaderMaterial).uniforms.uLocalSunPos.value.copy(localSunPos);
+      }
+
       // Make skybox float with camera position
       skybox.position.copy(camera.position);
 
-      // Rotate background nebulae
-      asteroidBelt.rotation.y += 0.0002;
+      // Rotate asteroid belt
+      asteroidBelt.rotation.y += 0.00018;
 
-      // Comet trajectory logic
+      // Comet logic
       if (cometActive) {
         cometProgress += dt * 0.15;
         if (cometProgress > 1) cometActive = false;
@@ -1017,7 +1135,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       // Track nearest planet to display info on HUD
       let nearestDist = Infinity;
       let nearestName = "DEEP SPACE";
-      let nearestColor = "#10B981"; // emerald default
+      let nearestColor = "#10B981";
       
       Object.entries(planets).forEach(([name, obj]) => {
         const d = Math.abs(obj.position.z - camera.position.z);
@@ -1028,30 +1146,28 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
         }
       });
 
-      // Natural auto-rotation of planets (independent of mouse movement)
-      // Rotational speeds scaled relative to Earth (1 day)
-      sun.rotation.y += 0.0006;         // Slow rotation
-      mercury.rotation.y += 0.00015;    // Extremely slow
-      venus.rotation.y -= 0.00008;      // Extremely slow retrograde
-      earth.rotation.y += 0.0028;       // 1.0x baseline
-      mars.rotation.y += 0.0027;        // ~1.03x
-      jupiter.rotation.y += 0.0068;     // Fast! (~2.4x)
-      saturnMesh.rotation.y += 0.0062;  // Fast! (~2.2x)
+      // Natural axis auto-rotations (relative relative speeds)
+      sun.rotation.y += 0.0006;
+      mercury.rotation.y += 0.00015;
+      venus.rotation.y -= 0.00008; // retrograde
+      earth.rotation.y += 0.0028;
+      earthClouds.rotation.y += 0.0004; // independent cloud drift
+      mars.rotation.y += 0.0027;
+      jupiter.rotation.y += 0.0068;
+      saturnMesh.rotation.y += 0.0062;
       
-      // Uranus rotating on its side (retrograde)
       const uMesh = planets['Uranus']?.children[0];
-      if (uMesh) uMesh.rotation.y -= 0.0039;
+      if (uMesh) uMesh.rotation.y -= 0.0039; // side retrograde
       
-      neptune.rotation.y += 0.0042;     // Fast! (~1.5x)
+      neptune.rotation.y += 0.0042;
 
-      // Space dust tracking camera
+      // Space dust tracking
       const dustPosAttr = dustGeo.attributes.position as THREE.BufferAttribute;
       for (let i = 0; i < dustCount; i++) {
         dustOffsets[i * 3] += dustVels[i * 3];
         dustOffsets[i * 3 + 1] += dustVels[i * 3 + 1];
         dustOffsets[i * 3 + 2] += dustVels[i * 3 + 2];
         
-        // Wrap around bounds
         if (Math.abs(dustOffsets[i * 3]) > 25) dustOffsets[i * 3] = (Math.random() - 0.5) * 50;
         if (Math.abs(dustOffsets[i * 3 + 1]) > 25) dustOffsets[i * 3 + 1] = (Math.random() - 0.5) * 50;
         if (Math.abs(dustOffsets[i * 3 + 2]) > 25) dustOffsets[i * 3 + 2] = (Math.random() - 0.5) * 50;
@@ -1065,9 +1181,9 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       let velocity = 0;
       if (st) {
         velocity = Math.abs(st.getVelocity());
-        (window as any).scrollVelocity = velocity; // for audio toggle module
+        (window as any).scrollVelocity = velocity; // for audio toggle
         
-        // Stretch camera field-of-view during warp speed
+        // FOV stretching
         camera.fov = 60 + Math.min(26, velocity * 0.012);
         camera.updateProjectionMatrix();
 
@@ -1091,7 +1207,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       camera.position.x += (currentMouseNDCX * 1.2 - camera.position.x) * 0.03 + (Math.random() - 0.5) * hoverShake;
       camera.position.y += (currentMouseNDCY * 0.5 - camera.position.y) * 0.03 + (Math.random() - 0.5) * hoverShake;
 
-      // Sun and Jupiter high-gravity camera buffet shakes
+      // Sun and Jupiter high-gravity shakes
       const sunProx = Math.max(0, 1 - Math.abs(camera.position.z) / 22) * 0.016;
       if (sunProx > 0) {
         camera.position.x += (Math.random() - 0.5) * sunProx;
@@ -1103,14 +1219,13 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
         camera.position.y += (Math.random() - 0.5) * jupProx;
       }
 
-      // Dynamic camera alignment (look ahead with curving motion)
+      // Dynamic camera look at target (slalom auto-tracking)
       const lookTarget = new THREE.Vector3(0, 0, camera.position.z - 18);
       camera.lookAt(lookTarget);
 
-      // Follow lights
       fillLight.position.copy(camera.position);
 
-      // Direct DOM updates for High-Frequency HUD display (Avoids React re-renders!)
+      // Direct DOM updates for High-Frequency HUD display
       if (hudCoordsRef.current) {
         hudCoordsRef.current.innerText = `COORD: X: ${camera.position.x.toFixed(2)} Y: ${camera.position.y.toFixed(2)} Z: ${camera.position.z.toFixed(2)}`;
       }
@@ -1137,7 +1252,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
         }
       }
       
-      // Warning overlay when too close to the Sun
+      // Warning overlay when too close to Sun
       if (hudWarnRef.current) {
         if (nearestName === 'Sun' && nearestDist < 20) {
           hudWarnRef.current.style.opacity = '1';
@@ -1150,7 +1265,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
         }
       }
 
-      // HUD Theme Color Interpolation
+      // HUD Color variables
       document.documentElement.style.setProperty('--hud-color', nearestColor);
 
       // Orbital progress bar
@@ -1160,7 +1275,8 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
         hudProgressRef.current.style.strokeDashoffset = String(strokeDashOffset);
       }
 
-      renderer.render(scene, camera);
+      // Render composer instead of raw renderer (applies post-processing bloom!)
+      composer.render();
     };
     animate();
 
@@ -1174,7 +1290,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       }
     });
 
-    // Curving camera slalom path through the Solar System (keeps planets centered at key stops)
+    // Curving camera slalom path (keeps planets centered at key stops)
     tl.to(camera.position, { z: 18, x: 0, y: 0.3, ease: "power2.inOut" }, 0)       // Sun
       .to(camera.position, { z: -12, x: -6.0, y: 2.0, ease: "power2.inOut" }, 0.5)  // Swoop 1 (Slalom past Sun)
       .to(camera.position, { z: -34, x: 0.1, y: -0.05, ease: "power2.inOut" }, 1)   // Mercury
@@ -1187,12 +1303,12 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       .to(camera.position, { z: -188, x: -12.0, y: 4.5, ease: "power2.inOut" }, 4.5) // Swoop 5 (Belt passing)
       .to(camera.position, { z: -212, x: -0.3, y: 0.15, ease: "power2.inOut" }, 5)  // Jupiter
       .to(camera.position, { z: -252, x: 15.0, y: -6.0, ease: "power2.inOut" }, 5.5) // Swoop 6 (Slalom past Jupiter)
-      .to(camera.position, { z: -276, x: 0.4, y: 0.75, ease: "power2.inOut" }, 6)   // Saturn (Frames rings beautifully!)
+      .to(camera.position, { z: -276, x: 0.4, y: 0.75, ease: "power2.inOut" }, 6)   // Saturn
       .to(camera.position, { z: -322, x: -14.0, y: 5.0, ease: "power2.inOut" }, 6.5) // Swoop 7 (Slalom past Saturn)
       .to(camera.position, { z: -348, x: -0.2, y: 0.1, ease: "power2.inOut" }, 7)   // Uranus
       .to(camera.position, { z: -392, x: 12.0, y: -4.5, ease: "power2.inOut" }, 7.5) // Swoop 8 (Slalom past Uranus)
       .to(camera.position, { z: -418, x: 0.25, y: -0.1, ease: "power2.inOut" }, 8)  // Neptune
-      .to(camera.position, { z: -220, y: 150, x: 0, ease: "power2.inOut" }, 9);     // Dynamic overview angle
+      .to(camera.position, { z: -220, y: 150, x: 0, ease: "power2.inOut" }, 9);     // Overview angle
 
     gsap.utils.toArray('.reveal-text').forEach((el: any) => {
       gsap.fromTo(el, 
@@ -1205,6 +1321,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
     };
     window.addEventListener('resize', handleResize);
 
@@ -1216,6 +1333,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       ScrollTrigger.getAll().forEach(t => t.kill());
       lenis.destroy();
       
+      composer.dispose();
       disposables.forEach(d => d.dispose());
       scene.children.forEach(child => {
         if ((child as THREE.Mesh).geometry) (child as THREE.Mesh).geometry.dispose();
@@ -1274,7 +1392,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       <div ref={containerRef} className="relative w-full" style={{ height: "1000vh" }}>
         <canvas ref={canvasRef} className="fixed top-0 left-0 w-full h-screen z-0 outline-none" />
         
-        {/* Futuristic Spacecraft HUD Overlay (Pipes CSS variable custom hex color) */}
+        {/* Futuristic Spacecraft HUD Overlay */}
         <div 
           ref={hudContainerRef}
           className="fixed inset-0 z-20 pointer-events-none flex flex-col justify-between p-6 font-mono text-[10px] tracking-wider transition-colors duration-500"
@@ -1306,7 +1424,6 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="relative w-44 h-44 flex items-center justify-center">
               <svg className="w-full h-full opacity-35" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)', color: 'var(--hud-color)' }}>
-                {/* HUD orbital progress track */}
                 <circle cx="50" cy="50" r="30" stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" fill="none" />
                 <circle 
                   ref={hudProgressRef} 
@@ -1322,7 +1439,6 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
                 />
               </svg>
               
-              {/* Inner locks */}
               <div className="absolute w-24 h-24 border border-dashed rounded-full opacity-15 animate-spin" style={{ animationDuration: '40s', borderColor: 'var(--hud-color)' }} />
               <div className="absolute w-12 h-12 border rounded-full opacity-25" style={{ borderColor: 'var(--hud-color)' }} />
               <div className="absolute w-1.5 h-1.5 rounded-full bg-white opacity-80" />
@@ -1349,7 +1465,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
           </div>
         </div>
         
-        {/* Info panels / text layouts overlay */}
+        {/* Info panels overlay */}
         <div className="relative z-10 w-full pointer-events-none">
           <section className="h-screen w-full flex flex-col items-center justify-center text-center px-4">
             <h1 className="reveal-text text-5xl md:text-7xl lg:text-9xl font-display font-black tracking-[0.25em] text-white drop-shadow-[0_0_25px_rgba(255,255,255,0.25)]">
@@ -1373,7 +1489,6 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
           {renderInfoPanel('Uranus', 'end', planetData.Uranus.color)}
           {renderInfoPanel('Neptune', 'start', planetData.Neptune.color)}
           
-          {/* Final cinematic screen */}
           <section className="h-screen w-full flex flex-col items-center justify-center text-center px-4 relative">
             <h2 className="reveal-text text-4xl md:text-6xl font-display font-black tracking-[0.2em] text-white/90">
               DEEP EXPEDITION COMPLETE
