@@ -185,6 +185,64 @@ const earthShaders = {
   `
 };
 
+const venusShaders = {
+  vertexShader: `
+    varying vec3 vNormal;
+    varying vec3 vWorldNormal;
+    varying vec3 vWorldPosition;
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      vNormal = normalize(normalMatrix * normal);
+      vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+      vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    varying vec3 vNormal;
+    varying vec3 vWorldNormal;
+    varying vec3 vWorldPosition;
+    varying vec2 vUv;
+    uniform float time;
+    uniform vec3 uSunPosition;
+    uniform sampler2D uTexture;
+    ${noiseGLSL}
+    void main() {
+      vec3 lightDir = normalize(uSunPosition - vWorldPosition);
+      vec3 normal = normalize(vWorldNormal);
+      float diffuse = max(dot(normal, lightDir), 0.0);
+      
+      // Venus fast cloud rotation (super-rotation)
+      vec2 uv = vUv;
+      uv.x += time * 0.015;
+      
+      // Chevron-like cloud distortion at the equator
+      float latFactor = cos(uv.y * 3.14159 - 1.57079); // 1.0 at equator, 0.0 at poles
+      float wave = sin(uv.x * 6.0 - uv.y * 3.0) * 0.012 * latFactor;
+      uv.x += wave;
+      
+      // Add subtle turbulence
+      float turbulence = fbm(vec3(uv * 12.0, time * 0.04)) * 0.008;
+      uv.x += turbulence;
+      uv.y += turbulence;
+      
+      vec4 texColor = texture2D(uTexture, uv);
+      
+      // Fresnel limb darkening/thick atmosphere absorption
+      float fresnel = pow(1.0 - max(0.0, dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.2);
+      
+      // Venus albedo is very high
+      vec3 finalColor = texColor.rgb * (diffuse * 0.9 + 0.1);
+      
+      // Hot sulfurous atmosphere haze glow at the limb
+      finalColor += vec3(0.92, 0.76, 0.42) * fresnel * 0.42 * (diffuse + 0.08);
+      
+      gl_FragColor = vec4(finalColor, 1.0);
+    }
+  `
+};
+
 const jupiterShaders = {
   vertexShader: `
     varying vec3 vNormal;
@@ -721,16 +779,19 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     planets['Mercury'] = mercury;
     interactableMeshes.push(mercury);
  
-    // 3. VENUS
+    // 3. VENUS (Custom volumetric shader simulating hot dense atmosphere & cloud super-rotation)
+    const venusMat = addDisposable(new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0 },
+        uSunPosition: { value: new THREE.Vector3(0, 0, 0) },
+        uTexture: { value: texVenus }
+      },
+      vertexShader: venusShaders.vertexShader,
+      fragmentShader: venusShaders.fragmentShader
+    }));
     const venus = new THREE.Mesh(
       addDisposable(new THREE.SphereGeometry(1.2, 48, 48)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        map: texVenus,
-        bumpMap: texVenus,
-        bumpScale: 0.004,
-        roughness: 0.9,
-        metalness: 0.0
-      }))
+      venusMat
     );
     venus.position.set(0, 0, -80);
     venus.castShadow = true;
@@ -1101,6 +1162,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
 
       // Update shader materials
       if (sunMat.uniforms) sunMat.uniforms.time.value = time;
+      if (venusMat.uniforms) venusMat.uniforms.time.value = time;
       if (earthMat.uniforms) earthMat.uniforms.time.value = time;
       if (jupMat.uniforms) jupMat.uniforms.time.value = time;
       if (skyboxMat.uniforms) skyboxMat.uniforms.time.value = time;
