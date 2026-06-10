@@ -159,9 +159,9 @@ const earthShaders = {
       // Sample water specular mask
       float waterVal = texture2D(tWater, vUv).r;
       
-      // Specular ocean reflections
+      // Specular ocean reflections (subtle, non-blown-out highlight)
       vec3 halfDir = normalize(lightDir + viewDir);
-      float spec = pow(max(0.0, dot(bumpNormal, halfDir)), 48.0) * waterVal * 1.8;
+      float spec = pow(max(0.0, dot(bumpNormal, halfDir)), 64.0) * waterVal * 0.15; // Greatly reduced albedo multiplier to prevent washing out the oceans
       
       float diffuse = dot(bumpNormal, lightDir);
       float dayFactor = smoothstep(-0.15, 0.15, diffuse);
@@ -175,7 +175,7 @@ const earthShaders = {
       // Earth atmosphere scatter rim glow (blue marble haze)
       float rim = 1.0 - max(0.0, dot(vNormal, vec3(0.0, 0.0, 1.0)));
       rim = pow(rim, 4.2);
-      vec3 atmosGlow = vec3(0.25, 0.55, 1.0) * rim * 0.75 * max(diffuse, 0.0);
+      vec3 atmosGlow = vec3(0.25, 0.55, 1.0) * rim * 0.4 * max(diffuse, 0.0); // Toned down atmosGlow to keep continents crisp
       
       vec3 terrainColor = dayColor * (max(diffuse, 0.0) + 0.05) + vec3(0.8, 0.9, 1.0) * spec;
       vec3 finalColor = mix(nightColor, terrainColor, dayFactor) + atmosGlow;
@@ -868,7 +868,8 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     );
     earth.add(eAtmos);
 
-    // Separate Earth clouds layer
+    // Separate Earth clouds layer (REMOVED as requested by user to keep continents clean)
+    /*
     const cloudGeo = addDisposable(new THREE.SphereGeometry(1.312, 48, 48)); // Just inside atmosphere
     const cloudMat = addDisposable(new THREE.MeshStandardMaterial({
       alphaMap: texEarthClouds,
@@ -883,6 +884,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     const earthClouds = new THREE.Mesh(cloudGeo, cloudMat);
     earthClouds.castShadow = true;
     earth.add(earthClouds);
+    */
  
     // 5. MARS
     const mars = new THREE.Mesh(
@@ -1275,7 +1277,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       mercury.rotation.y += 0.00015;
       venus.rotation.y -= 0.00008; // retrograde
       earth.rotation.y += 0.0028;
-      earthClouds.rotation.y += 0.0004; // independent cloud drift
+      // earthClouds.rotation.y += 0.0004; // independent cloud drift (REMOVED)
       mars.rotation.y += 0.0027;
       
       // Orbiting Mars Moons
