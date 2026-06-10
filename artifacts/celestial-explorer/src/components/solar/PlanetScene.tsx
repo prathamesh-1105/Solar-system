@@ -1935,29 +1935,35 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
         trigger: containerRef.current,
         start: "top top",
         end: "bottom bottom",
-        scrub: 1.2,
+        scrub: 0.65, // More responsive and tight scroll scrub to prevent lag
+        snap: {
+          snapTo: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], // Snaps to each planet stop and the overview
+          duration: { min: 0.25, max: 0.65 },
+          delay: 0.05,
+          ease: "power2.out"
+        }
       }
     });
 
-    // Curving camera slalom path (keeps planets centered at key stops)
-    tl.to(camera.position, { z: 18, x: 0, y: 0.3, ease: "power2.inOut" }, 0)       // Sun
-      .to(camera.position, { z: -12, x: -6.0, y: 2.0, ease: "power2.inOut" }, 0.5)  // Swoop 1 (Slalom past Sun)
-      .to(camera.position, { z: -34, x: 0.1, y: -0.05, ease: "power2.inOut" }, 1)   // Mercury
-      .to(camera.position, { z: -58, x: 7.0, y: -2.2, ease: "power2.inOut" }, 1.5)  // Swoop 2 (Slalom past Mercury)
-      .to(camera.position, { z: -74, x: -0.15, y: 0.05, ease: "power2.inOut" }, 2)  // Venus
-      .to(camera.position, { z: -98, x: -8.0, y: 3.0, ease: "power2.inOut" }, 2.5)  // Swoop 3 (Slalom past Venus)
-      .to(camera.position, { z: -113, x: 0, y: 0.15, ease: "power2.inOut" }, 3)     // Earth
-      .to(camera.position, { z: -138, x: 8.0, y: -2.8, ease: "power2.inOut" }, 3.5) // Swoop 4 (Slalom past Earth)
-      .to(camera.position, { z: -153, x: 0.1, y: -0.05, ease: "power2.inOut" }, 4)  // Mars
-      .to(camera.position, { z: -188, x: -12.0, y: 4.5, ease: "power2.inOut" }, 4.5) // Swoop 5 (Belt passing)
-      .to(camera.position, { z: -212, x: -0.3, y: 0.15, ease: "power2.inOut" }, 5)  // Jupiter
-      .to(camera.position, { z: -252, x: 15.0, y: -6.0, ease: "power2.inOut" }, 5.5) // Swoop 6 (Slalom past Jupiter)
-      .to(camera.position, { z: -276, x: 0.4, y: 0.75, ease: "power2.inOut" }, 6)   // Saturn
-      .to(camera.position, { z: -322, x: -14.0, y: 5.0, ease: "power2.inOut" }, 6.5) // Swoop 7 (Slalom past Saturn)
-      .to(camera.position, { z: -348, x: -0.2, y: 0.1, ease: "power2.inOut" }, 7)   // Uranus
-      .to(camera.position, { z: -392, x: 12.0, y: -4.5, ease: "power2.inOut" }, 7.5) // Swoop 8 (Slalom past Uranus)
-      .to(camera.position, { z: -418, x: 0.25, y: -0.1, ease: "power2.inOut" }, 8)  // Neptune
-      .to(camera.position, { z: -220, y: 150, x: 0, ease: "power2.inOut" }, 9);     // Overview angle
+    // Curving camera slalom path - shifted by 1.0 to align perfectly with the 11 HTML sections (10 scroll intervals)
+    tl.to(camera.position, { z: 18, x: 0, y: 0.3, ease: "power2.inOut" }, 1)       // Sun
+      .to(camera.position, { z: -12, x: -6.0, y: 2.0, ease: "power2.inOut" }, 1.5)  // Swoop 1 (Slalom past Sun)
+      .to(camera.position, { z: -34, x: 0.1, y: -0.05, ease: "power2.inOut" }, 2)   // Mercury
+      .to(camera.position, { z: -58, x: 7.0, y: -2.2, ease: "power2.inOut" }, 2.5)  // Swoop 2 (Slalom past Mercury)
+      .to(camera.position, { z: -74, x: -0.15, y: 0.05, ease: "power2.inOut" }, 3)  // Venus
+      .to(camera.position, { z: -98, x: -8.0, y: 3.0, ease: "power2.inOut" }, 3.5)  // Swoop 3 (Slalom past Venus)
+      .to(camera.position, { z: -113, x: 0, y: 0.15, ease: "power2.inOut" }, 4)     // Earth
+      .to(camera.position, { z: -138, x: 8.0, y: -2.8, ease: "power2.inOut" }, 4.5) // Swoop 4 (Slalom past Earth)
+      .to(camera.position, { z: -153, x: 0.1, y: -0.05, ease: "power2.inOut" }, 5)  // Mars
+      .to(camera.position, { z: -188, x: -12.0, y: 4.5, ease: "power2.inOut" }, 5.5) // Swoop 5 (Belt passing)
+      .to(camera.position, { z: -212, x: -0.3, y: 0.15, ease: "power2.inOut" }, 6)  // Jupiter
+      .to(camera.position, { z: -252, x: 15.0, y: -6.0, ease: "power2.inOut" }, 6.5) // Swoop 6 (Slalom past Jupiter)
+      .to(camera.position, { z: -276, x: 0.4, y: 0.75, ease: "power2.inOut" }, 7)   // Saturn
+      .to(camera.position, { z: -322, x: -14.0, y: 5.0, ease: "power2.inOut" }, 7.5) // Swoop 7 (Slalom past Saturn)
+      .to(camera.position, { z: -348, x: -0.2, y: 0.1, ease: "power2.inOut" }, 8)   // Uranus
+      .to(camera.position, { z: -392, x: 12.0, y: -4.5, ease: "power2.inOut" }, 8.5) // Swoop 8 (Slalom past Uranus)
+      .to(camera.position, { z: -418, x: 0.25, y: -0.1, ease: "power2.inOut" }, 9)  // Neptune
+      .to(camera.position, { z: -220, y: 150, x: 0, ease: "power2.inOut" }, 10);     // Overview angle
 
     gsap.utils.toArray('.reveal-text').forEach((el: any) => {
       gsap.fromTo(el, 
@@ -2039,7 +2045,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
 
   return (
     <>
-      <div ref={containerRef} className="relative w-full" style={{ height: "1000vh" }}>
+      <div ref={containerRef} className="relative w-full" style={{ height: "1100vh" }}>
         <canvas ref={canvasRef} className="fixed top-0 left-0 w-full h-screen z-0 outline-none" />
         
         {/* Futuristic Spacecraft HUD Overlay */}
