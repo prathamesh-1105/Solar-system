@@ -1064,10 +1064,10 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     planets['Mars'] = mars;
     interactableMeshes.push(mars);
  
-    // Mars atmosphere shell (thin dust layer)
+    // Mars atmosphere shell (thin dust layer - tightened for scientific accuracy)
     const mAtmos = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(0.74, 48, 48)),
-      createAtmosphereMaterial(new THREE.Color('#e05934'), 0.38, 3.0)
+      addDisposable(new THREE.SphereGeometry(0.718, 48, 48)), // Tighter thin atmosphere
+      createAtmosphereMaterial(new THREE.Color('#e05934'), 0.35, 3.5)
     );
     mars.add(mAtmos);
 
@@ -1095,6 +1095,47 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     deimos.castShadow = true;
     deimos.receiveShadow = true;
     mars.add(deimos);
+
+    // NASA's Mars Reconnaissance Orbiter (MRO)
+    const mroProbe = new THREE.Group();
+    const mroBody = new THREE.Mesh(
+      addDisposable(new THREE.BoxGeometry(0.025, 0.025, 0.025)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0xd4af37, // Gold foil bus
+        metalness: 0.8,
+        roughness: 0.2
+      }))
+    );
+    mroProbe.add(mroBody);
+
+    const mroDish = new THREE.Mesh(
+      addDisposable(new THREE.ConeGeometry(0.03, 0.015, 12)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0xcccccc, // High-gain antenna dish
+        roughness: 0.5,
+        metalness: 0.1
+      }))
+    );
+    mroDish.rotation.x = -Math.PI / 2; // Point down at Mars for mapping/comms
+    mroDish.position.z = 0.02;
+    mroProbe.add(mroDish);
+
+    const mroPanelLeft = new THREE.Mesh(
+      addDisposable(new THREE.BoxGeometry(0.065, 0.018, 0.003)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0x1a365d,
+        metalness: 0.5,
+        roughness: 0.3
+      }))
+    );
+    mroPanelLeft.position.set(-0.05, 0, 0);
+    mroProbe.add(mroPanelLeft);
+
+    const mroPanelRight = mroPanelLeft.clone();
+    mroPanelRight.position.set(0.05, 0, 0);
+    mroProbe.add(mroPanelRight);
+
+    scene.add(mroProbe);
  
     // 6. INSTANCED 3D ASTEROID BELT (Awwwards optimization - 1 draw call!)
     const asteroidCount = 1200;
@@ -1166,6 +1207,94 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       createAtmosphereMaterial(new THREE.Color('#F59E0B'), 0.32, 2.2)
     );
     jupiter.add(jAtmos);
+
+    // Jupiter's 4 Galilean Moons: Io, Europa, Ganymede, and Callisto
+    // Io (Yellow-orange volcanic)
+    const io = new THREE.Mesh(
+      addDisposable(new THREE.SphereGeometry(0.06, 24, 24)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0xe6df3c, // Sulfurous yellow-orange
+        roughness: 0.8,
+        metalness: 0.1
+      }))
+    );
+    io.castShadow = true;
+    io.receiveShadow = true;
+    scene.add(io);
+
+    // Europa (Icy white-grey)
+    const europa = new THREE.Mesh(
+      addDisposable(new THREE.SphereGeometry(0.05, 24, 24)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0xd9d7cd, // Reflective ice-white
+        roughness: 0.45,
+        metalness: 0.05
+      }))
+    );
+    europa.castShadow = true;
+    europa.receiveShadow = true;
+    scene.add(europa);
+
+    // Ganymede (Grey-brown cratered - largest moon)
+    const ganymede = new THREE.Mesh(
+      addDisposable(new THREE.SphereGeometry(0.08, 24, 24)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        map: texMercury, // Reuse Mercury texture for moon-like cratering
+        color: 0x8a8479, // Desaturated grey-brown albedo
+        roughness: 0.9,
+        metalness: 0.1
+      }))
+    );
+    ganymede.castShadow = true;
+    ganymede.receiveShadow = true;
+    scene.add(ganymede);
+
+    // Callisto (Dark heavily cratered ice-rock)
+    const callisto = new THREE.Mesh(
+      addDisposable(new THREE.SphereGeometry(0.075, 24, 24)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        map: texMercury,
+        color: 0x55514c, // Very dark grey-brown
+        roughness: 0.95,
+        metalness: 0.05
+      }))
+    );
+    callisto.castShadow = true;
+    callisto.receiveShadow = true;
+    scene.add(callisto);
+
+    // NASA's Juno spacecraft orbiting Jupiter
+    const junoProbe = new THREE.Group();
+    
+    // Main hexagonal body
+    const junoBody = new THREE.Mesh(
+      addDisposable(new THREE.CylinderGeometry(0.012, 0.012, 0.02, 6)), // Hexagonal shape
+      addDisposable(new THREE.MeshStandardMaterial({ color: 0x2c2c2c, metalness: 0.8, roughness: 0.2 }))
+    );
+    junoBody.rotation.x = Math.PI / 2;
+    junoProbe.add(junoBody);
+
+    // Juno's famous three-bladed solar array wings (propeller design)
+    const bladeGeo = addDisposable(new THREE.BoxGeometry(0.008, 0.08, 0.002));
+    const bladeMat = addDisposable(new THREE.MeshStandardMaterial({ color: 0x1e2d42, metalness: 0.6, roughness: 0.3 }));
+    for (let i = 0; i < 3; i++) {
+      const blade = new THREE.Mesh(bladeGeo, bladeMat);
+      blade.position.y = 0.04;
+      const bladeContainer = new THREE.Group();
+      bladeContainer.rotation.z = (i * Math.PI * 2) / 3;
+      bladeContainer.add(blade);
+      junoProbe.add(bladeContainer);
+    }
+
+    // Magnetometer boom on one of the blades (slightly longer tip)
+    const magBoom = new THREE.Mesh(
+      addDisposable(new THREE.CylinderGeometry(0.002, 0.002, 0.025, 4)),
+      addDisposable(new THREE.MeshStandardMaterial({ color: 0xcccccc }))
+    );
+    magBoom.position.y = 0.09;
+    junoProbe.children[0].add(magBoom); // Attach to first blade
+
+    scene.add(junoProbe);
  
     // 8. SATURN (Custom analytical shadows)
     const saturnGroup = new THREE.Group();
@@ -1482,6 +1611,41 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       iss.position.y = earth.position.y + Math.sin(time * 0.85 * 0.8) * 0.25;
       iss.lookAt(earth.position);
       iss.rotateX(Math.PI / 2); // Keep solar panels aligned perpendicular to flight direction
+
+      // Mars: MRO Orbit
+      mroProbe.position.x = mars.position.x + Math.cos(time * 0.7) * 1.35;
+      mroProbe.position.z = mars.position.z + Math.sin(time * 0.7) * 1.35;
+      mroProbe.position.y = mars.position.y + Math.sin(time * 0.7 * 0.9) * 0.3; // Polar inclined orbit
+      mroProbe.lookAt(mars.position);
+
+      // Jupiter: Io Orbit
+      io.position.x = jupiter.position.x + Math.cos(time * 0.18) * 5.2;
+      io.position.z = jupiter.position.z + Math.sin(time * 0.18) * 5.2;
+      io.rotation.y += 0.01;
+
+      // Jupiter: Europa Orbit
+      europa.position.x = jupiter.position.x + Math.cos(time * 0.13 + 1.5) * 7.2;
+      europa.position.z = jupiter.position.z + Math.sin(time * 0.13 + 1.5) * 7.2;
+      europa.rotation.y += 0.008;
+
+      // Jupiter: Ganymede Orbit
+      ganymede.position.x = jupiter.position.x + Math.cos(time * 0.09 + 3.0) * 9.8;
+      ganymede.position.z = jupiter.position.z + Math.sin(time * 0.09 + 3.0) * 9.8;
+      ganymede.rotation.y += 0.005;
+
+      // Jupiter: Callisto Orbit
+      callisto.position.x = jupiter.position.x + Math.cos(time * 0.05 + 4.5) * 12.5;
+      callisto.position.z = jupiter.position.z + Math.sin(time * 0.05 + 4.5) * 12.5;
+      callisto.rotation.y += 0.003;
+
+      // Jupiter: Juno Probe Orbit (Highly elliptical polar orbit)
+      const junoAngle = time * 0.08;
+      const junoRadius = 9.0 + Math.sin(junoAngle) * 5.0; // Varies between 4.0 and 14.0 from Jupiter center
+      junoProbe.position.x = jupiter.position.x + Math.cos(junoAngle) * junoRadius * 0.2; // Squashed orbit
+      junoProbe.position.z = jupiter.position.z + Math.sin(junoAngle) * junoRadius;
+      junoProbe.position.y = jupiter.position.y + Math.cos(junoAngle) * junoRadius * 0.9; // High polar inclination
+      junoProbe.lookAt(jupiter.position);
+
       jupiter.rotation.y += 0.0068;
       saturnMesh.rotation.y += 0.0062;
       
