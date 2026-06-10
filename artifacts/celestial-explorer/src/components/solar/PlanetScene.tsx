@@ -549,22 +549,22 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       const imgData = ctx.createImageData(1024, 512);
       const data = imgData.data;
       
-      // Simple Perlin-like value noise function for organic cloud shapes
+      // Fine-grained multi-octave noise generator for wispy organic clouds
       const noise = (x: number, y: number) => {
         let val = 0;
         let scale = 1.0;
         let weight = 1.0;
         let totalWeight = 0;
         for (let o = 0; o < 5; o++) {
-          const nx = x * 0.005 * scale;
-          const ny = y * 0.005 * scale;
-          const n = (Math.sin(nx * 3.1 + Math.cos(ny * 2.5)) + 
-                     Math.sin(nx * 1.5 - ny * 3.8) + 
-                     Math.cos(nx * 2.2 + ny * 1.8)) / 3.0;
+          const nx = x * 0.015 * scale;
+          const ny = y * 0.015 * scale;
+          const n = (Math.sin(nx * 2.3 + Math.cos(ny * 1.8)) + 
+                     Math.sin(nx * 1.2 - ny * 2.8) + 
+                     Math.cos(nx * 1.9 + ny * 1.5)) / 3.0;
           val += (n * 0.5 + 0.5) * weight;
           totalWeight += weight;
-          scale *= 2.1;
-          weight *= 0.48;
+          scale *= 2.2;
+          weight *= 0.45;
         }
         return val / totalWeight;
       };
@@ -575,18 +575,21 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
           const lat = (y / 512.0) * Math.PI;
           const latScale = Math.sin(lat); // 0 at poles, 1 at equator
           
-          // Add swirl/shear patterns based on longitude/latitude
-          const swirl = Math.sin(x * 0.03 + y * 0.02) * 15;
-          const nVal = noise(x + swirl, y + Math.cos(x * 0.01) * 20);
+          // Organic weather bands (clouds concentrate around temperate and equatorial zones)
+          const tempBands = 0.3 + 0.7 * Math.pow(Math.sin(lat * 3.0), 2.0);
+          const bandFactor = Math.pow(latScale, 2.0) * tempBands;
           
-          // Threshold the noise to create distinct clouds and clear sky, concentrating at specific bands
-          const bandFactor = Math.pow(latScale, 1.5) * (0.4 + 0.6 * Math.sin(lat * 6.0)); // weather bands
-          const alpha = Math.max(0, (nVal - 0.44) * 2.5 * bandFactor);
+          // Micro-swirl and atmospheric wind shear
+          const swirl = Math.sin(x * 0.04 + y * 0.03) * 12.0;
+          const nVal = noise(x + swirl, y + Math.cos(x * 0.02) * 15.0);
+          
+          // Soft alpha transition (no hard blocky edges)
+          const alpha = Math.max(0.0, nVal - 0.38) * 0.85 * bandFactor;
           
           data[idx] = 255;
           data[idx + 1] = 255;
           data[idx + 2] = 255;
-          data[idx + 3] = Math.min(255, Math.floor(alpha * 235));
+          data[idx + 3] = Math.min(220, Math.floor(alpha * 255));
         }
       }
       ctx.putImageData(imgData, 0, 0);
@@ -860,19 +863,19 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
  
     // Earth blue atmosphere (thin, crisp halo)
     const eAtmos = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(1.33, 48, 48)),
-      createAtmosphereMaterial(new THREE.Color('#3894ff'), 0.38, 3.0)
+      addDisposable(new THREE.SphereGeometry(1.315, 48, 48)), // Tighten to match cloud layer exactly
+      createAtmosphereMaterial(new THREE.Color('#2b80ff'), 0.28, 3.2) // Softer, more integrated blue edge glow
     );
     earth.add(eAtmos);
 
     // Separate Earth clouds layer
-    const cloudGeo = addDisposable(new THREE.SphereGeometry(1.315, 48, 48));
+    const cloudGeo = addDisposable(new THREE.SphereGeometry(1.312, 48, 48)); // Just inside atmosphere
     const cloudMat = addDisposable(new THREE.MeshStandardMaterial({
       alphaMap: texEarthClouds,
       transparent: true,
-      opacity: 0.38, // Semi-transparent clouds so continents are highly visible
-      color: 0xdddddd, // Softer white to prevent highlight washing
-      roughness: 0.95,
+      opacity: 0.26, // Much softer, semi-transparent clouds to reveal continents clearly
+      color: 0xcccccc, // Darker albedo prevents blowing out in the sun
+      roughness: 0.98, // Completely rough for realistic diffuse reflection
       metalness: 0.0,
       blending: THREE.NormalBlending,
       depthWrite: false
