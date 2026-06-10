@@ -466,8 +466,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     // Enable high-end render settings
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.enabled = false;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
 
@@ -708,12 +707,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     // Core Sun light source
     const sunLight = new THREE.PointLight(0xffffff, 6.0, 1500, 0); // Intensity 6.0, distance 1500, decay 0 (no light falloff for crisp solar illumination)
     sunLight.position.set(0, 0, 0);
-    sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 2048;
-    sunLight.shadow.mapSize.height = 2048;
-    sunLight.shadow.bias = -0.0005;
-    sunLight.shadow.camera.near = 5;
-    sunLight.shadow.camera.far = 450;
+    sunLight.castShadow = false;
     scene.add(sunLight);
 
     const fillLight = new THREE.DirectionalLight(0xa5c4f7, 0.35); // Richer fill light for planet camera-facing side
