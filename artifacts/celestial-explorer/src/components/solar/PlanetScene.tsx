@@ -898,12 +898,37 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     planets['Mars'] = mars;
     interactableMeshes.push(mars);
  
-    // Mars atmosphere shell
+    // Mars atmosphere shell (thin dust layer)
     const mAtmos = new THREE.Mesh(
       addDisposable(new THREE.SphereGeometry(0.74, 48, 48)),
-      createAtmosphereMaterial(new THREE.Color('#FF5522'), 0.32, 3.2)
+      createAtmosphereMaterial(new THREE.Color('#e05934'), 0.38, 3.0)
     );
     mars.add(mAtmos);
+
+    // Mars Moons: Phobos and Deimos
+    const phobos = new THREE.Mesh(
+      addDisposable(new THREE.DodecahedronGeometry(0.024, 0)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0x857d77,
+        roughness: 0.95,
+        metalness: 0.05
+      }))
+    );
+    phobos.castShadow = true;
+    phobos.receiveShadow = true;
+    mars.add(phobos);
+
+    const deimos = new THREE.Mesh(
+      addDisposable(new THREE.DodecahedronGeometry(0.015, 0)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0x7a7470,
+        roughness: 0.95,
+        metalness: 0.05
+      }))
+    );
+    deimos.castShadow = true;
+    deimos.receiveShadow = true;
+    mars.add(deimos);
  
     // 6. INSTANCED 3D ASTEROID BELT (Awwwards optimization - 1 draw call!)
     const asteroidCount = 1200;
@@ -1248,6 +1273,15 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       earth.rotation.y += 0.0028;
       earthClouds.rotation.y += 0.0004; // independent cloud drift
       mars.rotation.y += 0.0027;
+      
+      // Orbiting Mars Moons
+      phobos.position.x = Math.cos(time * 0.9) * 1.1;
+      phobos.position.z = Math.sin(time * 0.9) * 1.1;
+      phobos.rotation.y += 0.015;
+
+      deimos.position.x = Math.cos(time * 0.5 + 2.0) * 1.6;
+      deimos.position.z = Math.sin(time * 0.5 + 2.0) * 1.6;
+      deimos.rotation.y += 0.01;
       jupiter.rotation.y += 0.0068;
       saturnMesh.rotation.y += 0.0062;
       
