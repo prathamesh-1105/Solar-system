@@ -1,0 +1,4 @@
+{
+  "buildCommand": "pnpm --filter @workspace/solar-system run build",
+  "outputDirectory": "artifacts/celestial-explorer/dist/public"
+}

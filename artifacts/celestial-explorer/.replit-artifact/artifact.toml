@@ -19,7 +19,7 @@ run = "pnpm --filter @workspace/solar-system run dev"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/solar-system", "run", "build" ]
-publicDir = "artifacts/celestial-explorer/dist"
+publicDir = "artifacts/celestial-explorer/dist/public"
 serve = "static"
 
 [[services.production.rewrites]]
