@@ -174,8 +174,8 @@ const earthShaders = {
       
       // Earth atmosphere scatter rim glow (blue marble haze)
       float rim = 1.0 - max(0.0, dot(vNormal, vec3(0.0, 0.0, 1.0)));
-      rim = pow(rim, 3.5);
-      vec3 atmosGlow = vec3(0.35, 0.65, 1.0) * rim * 1.2 * max(diffuse, 0.0);
+      rim = pow(rim, 4.2);
+      vec3 atmosGlow = vec3(0.25, 0.55, 1.0) * rim * 0.75 * max(diffuse, 0.0);
       
       vec3 terrainColor = dayColor * (max(diffuse, 0.0) + 0.05) + vec3(0.8, 0.9, 1.0) * spec;
       vec3 finalColor = mix(nightColor, terrainColor, dayFactor) + atmosGlow;
@@ -858,10 +858,10 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     planets['Earth'] = earth;
     interactableMeshes.push(earth);
  
-    // Earth blue atmosphere
+    // Earth blue atmosphere (thin, crisp halo)
     const eAtmos = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(1.38, 48, 48)),
-      createAtmosphereMaterial(new THREE.Color('#4FAAFF'), 0.52, 2.5)
+      addDisposable(new THREE.SphereGeometry(1.33, 48, 48)),
+      createAtmosphereMaterial(new THREE.Color('#3894ff'), 0.38, 3.0)
     );
     earth.add(eAtmos);
 
@@ -870,8 +870,9 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     const cloudMat = addDisposable(new THREE.MeshStandardMaterial({
       alphaMap: texEarthClouds,
       transparent: true,
-      color: 0xffffff,
-      roughness: 0.9,
+      opacity: 0.38, // Semi-transparent clouds so continents are highly visible
+      color: 0xdddddd, // Softer white to prevent highlight washing
+      roughness: 0.95,
       metalness: 0.0,
       blending: THREE.NormalBlending,
       depthWrite: false
