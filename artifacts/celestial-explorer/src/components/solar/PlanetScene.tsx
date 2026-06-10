@@ -172,12 +172,11 @@ const earthShaders = {
       vec3 cityLightsColor = cityTex.rgb * twinkle * 2.6;
       vec3 nightColor = vec3(0.002, 0.004, 0.008) + cityLightsColor;
       
-      // Earth atmosphere scatter rim glow (blue marble haze)
       float rim = 1.0 - max(0.0, dot(vNormal, vec3(0.0, 0.0, 1.0)));
       rim = pow(rim, 4.2);
-      vec3 atmosGlow = vec3(0.25, 0.55, 1.0) * rim * 0.4 * max(diffuse, 0.0); // Toned down atmosGlow to keep continents crisp
+      vec3 atmosGlow = vec3(0.25, 0.55, 1.0) * rim * 0.52 * max(diffuse, 0.0); // Toned down atmosGlow to keep continents crisp
       
-      vec3 terrainColor = dayColor * (max(diffuse, 0.0) + 0.05) + vec3(0.8, 0.9, 1.0) * spec;
+      vec3 terrainColor = dayColor * (max(diffuse, 0.0) * 1.8 + 0.15) + vec3(0.8, 0.9, 1.0) * spec * 1.5;
       vec3 finalColor = mix(nightColor, terrainColor, dayFactor) + atmosGlow;
       
       gl_FragColor = vec4(finalColor, 1.0);
