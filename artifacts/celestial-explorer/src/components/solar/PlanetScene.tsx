@@ -1137,46 +1137,87 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
  
     // 6. INSTANCED 3D ASTEROID BELT (Awwwards optimization - 1 draw call!)
     const asteroidCount = 1200;
-    // Create random displaced rock geometries
+    // Create random displaced rock geometries (deformed non-uniformly for potato-like shapes)
     const rockGeo = addDisposable(new THREE.DodecahedronGeometry(0.08, 1));
     const rockPosAttr = rockGeo.attributes.position;
     for (let i = 0; i < rockPosAttr.count; i++) {
       const x = rockPosAttr.getX(i);
       const y = rockPosAttr.getY(i);
       const z = rockPosAttr.getZ(i);
-      const deform = 0.75 + Math.random() * 0.5;
-      rockPosAttr.setXYZ(i, x * deform, y * deform, z * deform);
+      // Irregular rocky deformations
+      const rx = 0.75 + Math.random() * 0.5;
+      const ry = 0.75 + Math.random() * 0.5;
+      const rz = 0.75 + Math.random() * 0.5;
+      rockPosAttr.setXYZ(i, x * rx, y * ry, z * rz);
     }
     rockGeo.computeVertexNormals();
  
     const rockMat = addDisposable(new THREE.MeshStandardMaterial({
-      color: 0x7E7E7E,
-      roughness: 0.9,
-      metalness: 0.1
+      bumpMap: texMercury, // Use cratered Mercury texture as a high-graphics bump map
+      bumpScale: 0.045,
+      roughness: 0.95,
+      metalness: 0.05
     }));
  
     const asteroidBelt = new THREE.InstancedMesh(rockGeo, rockMat, asteroidCount);
-    asteroidBelt.position.set(0, 0, -190);
-    asteroidBelt.castShadow = true;
+    asteroidBelt.position.set(0, 0, 0); // Center at origin to rotate around the Z-axis smoothly
+    asteroidBelt.castShadow = false;
     asteroidBelt.receiveShadow = true;
     
-    // Position instances along orbital rings
+    // Position instances scattered throughout the solar system (Main Belt + Inner/Outer system dust)
     const dummy = new THREE.Object3D();
     for (let i = 0; i < asteroidCount; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const radius = 18 + Math.random() * 9;
+      
+      const randRegion = Math.random();
+      let radius, zVal;
+      
+      if (randRegion < 0.65) {
+        // Main Asteroid Belt (between Mars -160 and Jupiter -220)
+        zVal = -190 + (Math.random() - 0.5) * 50;
+        radius = 8.5 + Math.random() * 15.0;
+      } else if (randRegion < 0.85) {
+        // Inner Solar System (between Sun 0 and Mars -160)
+        zVal = -20 - Math.random() * 140; 
+        radius = 6.0 + Math.random() * 12.0;
+      } else {
+        // Outer Solar System (between Jupiter -220 and Neptune -430)
+        zVal = -225 - Math.random() * 215;
+        radius = 9.0 + Math.random() * 18.0;
+      }
+      
       const x = Math.cos(angle) * radius;
-      const y = (Math.random() - 0.5) * 3.8;
-      const z = Math.sin(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      const z = zVal;
       
       dummy.position.set(x, y, z);
       dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-      const s = 0.5 + Math.random() * 1.0;
+      
+      const s = 0.35 + Math.random() * 1.1;
       dummy.scale.set(s, s, s);
       dummy.updateMatrix();
       asteroidBelt.setMatrixAt(i, dummy.matrix);
+      
+      // Random organic color variation for C-type, S-type, and M-type asteroids
+      const typeRand = Math.random();
+      let rColor;
+      if (typeRand < 0.65) {
+        // C-type (dark carbonaceous): dark grey-brown
+        const grey = 0.22 + Math.random() * 0.12;
+        rColor = new THREE.Color(grey * 1.05, grey * 0.95, grey * 0.9);
+      } else if (typeRand < 0.9) {
+        // S-type (stony/silicate): lighter brownish-grey
+        const grey = 0.45 + Math.random() * 0.15;
+        rColor = new THREE.Color(grey * 1.1, grey * 1.0, grey * 0.9);
+      } else {
+        // M-type (metallic): reddish/rusty-grey
+        const grey = 0.35 + Math.random() * 0.1;
+        rColor = new THREE.Color(grey * 1.25, grey * 0.95, grey * 0.85);
+      }
+      asteroidBelt.setColorAt(i, rColor);
     }
     asteroidBelt.instanceMatrix.needsUpdate = true;
+    if (asteroidBelt.instanceColor) asteroidBelt.instanceColor.needsUpdate = true;
     scene.add(asteroidBelt);
  
     // 7. JUPITER (swirling storms + bands)
@@ -1643,8 +1684,8 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       // Make skybox float with camera position
       skybox.position.copy(camera.position);
 
-      // Rotate asteroid belt
-      asteroidBelt.rotation.y += 0.00018;
+      // Rotate asteroid belt around the Z-axis (swirls around the slalom flight path)
+      asteroidBelt.rotation.z += 0.00022;
 
       // Comet logic
       if (cometActive) {

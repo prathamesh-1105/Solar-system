@@ -56,7 +56,7 @@ export default function PlanetModal({ planet, onClose }: PlanetModalProps) {
       >
         <button 
           onClick={onClose}
-          className="absolute top-6 right-6 p-2 text-white/50 hover:text-white transition-colors z-10"
+          className="absolute top-6 right-6 p-2 text-white/50 hover:text-white transition-colors z-30"
         >
           <X className="w-6 h-6" />
         </button>
