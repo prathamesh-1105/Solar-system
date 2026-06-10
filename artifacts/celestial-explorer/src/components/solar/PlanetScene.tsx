@@ -546,21 +546,50 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
 
     const texEarthClouds = createTexture(1024, 512, ctx => {
       ctx.clearRect(0, 0, 1024, 512);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-      for (let i = 0; i < 40; i++) {
-        ctx.beginPath(); ctx.ellipse(Math.random() * 1024, Math.random() * 512, Math.random() * 160 + 50, Math.random() * 35 + 12, Math.random() * 0.5 - 0.25, 0, Math.PI * 2); ctx.fill();
-      }
-      const drawNoiseLocal = (ctx: CanvasRenderingContext2D, w: number, h: number, amount: number) => {
-        const imgData = ctx.getImageData(0, 0, w, h);
-        for (let i = 0; i < imgData.data.length; i += 4) {
-          const noise = (Math.random() - 0.5) * amount;
-          imgData.data[i] = Math.max(0, Math.min(255, imgData.data[i] + noise));
-          imgData.data[i + 1] = Math.max(0, Math.min(255, imgData.data[i + 1] + noise));
-          imgData.data[i + 2] = Math.max(0, Math.min(255, imgData.data[i + 2] + noise));
+      const imgData = ctx.createImageData(1024, 512);
+      const data = imgData.data;
+      
+      // Simple Perlin-like value noise function for organic cloud shapes
+      const noise = (x: number, y: number) => {
+        let val = 0;
+        let scale = 1.0;
+        let weight = 1.0;
+        let totalWeight = 0;
+        for (let o = 0; o < 5; o++) {
+          const nx = x * 0.005 * scale;
+          const ny = y * 0.005 * scale;
+          const n = (Math.sin(nx * 3.1 + Math.cos(ny * 2.5)) + 
+                     Math.sin(nx * 1.5 - ny * 3.8) + 
+                     Math.cos(nx * 2.2 + ny * 1.8)) / 3.0;
+          val += (n * 0.5 + 0.5) * weight;
+          totalWeight += weight;
+          scale *= 2.1;
+          weight *= 0.48;
         }
-        ctx.putImageData(imgData, 0, 0);
+        return val / totalWeight;
       };
-      drawNoiseLocal(ctx, 1024, 512, 12);
+
+      for (let y = 0; y < 512; y++) {
+        for (let x = 0; x < 1024; x++) {
+          const idx = (y * 1024 + x) * 4;
+          const lat = (y / 512.0) * Math.PI;
+          const latScale = Math.sin(lat); // 0 at poles, 1 at equator
+          
+          // Add swirl/shear patterns based on longitude/latitude
+          const swirl = Math.sin(x * 0.03 + y * 0.02) * 15;
+          const nVal = noise(x + swirl, y + Math.cos(x * 0.01) * 20);
+          
+          // Threshold the noise to create distinct clouds and clear sky, concentrating at specific bands
+          const bandFactor = Math.pow(latScale, 1.5) * (0.4 + 0.6 * Math.sin(lat * 6.0)); // weather bands
+          const alpha = Math.max(0, (nVal - 0.44) * 2.5 * bandFactor);
+          
+          data[idx] = 255;
+          data[idx + 1] = 255;
+          data[idx + 2] = 255;
+          data[idx + 3] = Math.min(255, Math.floor(alpha * 235));
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
     });
 
     const texMars = loadTexture('/2k_mars.jpg');
