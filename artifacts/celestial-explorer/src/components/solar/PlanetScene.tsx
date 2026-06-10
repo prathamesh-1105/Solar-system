@@ -920,6 +920,47 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       createAtmosphereMaterial(new THREE.Color('#E8C66A'), 0.45, 2.0)
     );
     venus.add(vAtmos);
+
+    // NASA's Magellan spacecraft orbiting Venus
+    const magellanProbe = new THREE.Group();
+    const magellanBody = new THREE.Mesh(
+      addDisposable(new THREE.BoxGeometry(0.04, 0.04, 0.04)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0xd4af37, // Gold foil bus
+        metalness: 0.8,
+        roughness: 0.2
+      }))
+    );
+    magellanProbe.add(magellanBody);
+
+    const radarDish = new THREE.Mesh(
+      addDisposable(new THREE.ConeGeometry(0.065, 0.025, 16)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0xdddddd, // Light grey radar dish
+        roughness: 0.5,
+        metalness: 0.1
+      }))
+    );
+    radarDish.rotation.x = -Math.PI / 2; // Face towards Venus
+    radarDish.position.z = 0.03;
+    magellanProbe.add(radarDish);
+
+    const magellanPanelLeft = new THREE.Mesh(
+      addDisposable(new THREE.BoxGeometry(0.09, 0.03, 0.003)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0x1a365d, // Blue solar panels
+        metalness: 0.5,
+        roughness: 0.3
+      }))
+    );
+    magellanPanelLeft.position.set(-0.07, 0, 0);
+    magellanProbe.add(magellanPanelLeft);
+
+    const magellanPanelRight = magellanPanelLeft.clone();
+    magellanPanelRight.position.set(0.07, 0, 0);
+    magellanProbe.add(magellanPanelRight);
+
+    scene.add(magellanProbe);
  
     // 4. EARTH (PBR + custom shader for day/night city lights, elevation bump, water specular, and cloud shadows)
     const earthGeo = addDisposable(new THREE.SphereGeometry(1.3, 48, 48));
@@ -967,6 +1008,43 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     earthClouds.castShadow = true;
     earth.add(earthClouds);
     */
+
+    // The Moon (Luna) orbiting Earth
+    const moon = new THREE.Mesh(
+      addDisposable(new THREE.SphereGeometry(0.35, 32, 32)), // 27% Earth's size
+      addDisposable(new THREE.MeshStandardMaterial({
+        map: texMercury, // Mercury texture is an excellent cratered moon-like match
+        bumpMap: texMercury,
+        bumpScale: 0.005,
+        roughness: 0.9,
+        metalness: 0.05
+      }))
+    );
+    moon.castShadow = true;
+    moon.receiveShadow = true;
+    scene.add(moon);
+
+    // International Space Station (ISS) orbiting Earth
+    const iss = new THREE.Group();
+    const issBody = new THREE.Mesh(
+      addDisposable(new THREE.CylinderGeometry(0.008, 0.008, 0.07, 8)), // Main truss structure
+      addDisposable(new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.6, roughness: 0.3 }))
+    );
+    issBody.rotation.z = Math.PI / 2;
+    iss.add(issBody);
+
+    const arrayGeo = addDisposable(new THREE.BoxGeometry(0.02, 0.045, 0.002));
+    const arrayMat = addDisposable(new THREE.MeshStandardMaterial({ color: 0xb58a3e, metalness: 0.5, roughness: 0.4 })); // Goldish solar panels
+    for (let i = 0; i < 4; i++) {
+      const panel1 = new THREE.Mesh(arrayGeo, arrayMat);
+      const panel2 = panel1.clone();
+      const posX = -0.025 + (i * 0.016);
+      panel1.position.set(posX, 0.025, 0);
+      panel2.position.set(posX, -0.025, 0);
+      iss.add(panel1);
+      iss.add(panel2);
+    }
+    scene.add(iss);
  
     // 5. MARS
     const mars = new THREE.Mesh(
@@ -1384,6 +1462,26 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       // Always point white sunshade towards the Sun (away from the probe bus center)
       const sunDir = new THREE.Vector3(0, 0, 0).sub(messengerProbe.position).normalize();
       messengerProbe.lookAt(messengerProbe.position.clone().add(sunDir));
+
+      // Venus: Magellan Probe Orbit
+      magellanProbe.position.x = venus.position.x + Math.cos(time * 0.4) * 1.65;
+      magellanProbe.position.z = venus.position.z + Math.sin(time * 0.4) * 1.65;
+      magellanProbe.position.y = venus.position.y + Math.sin(time * 0.25) * 0.15; // Inclination
+      // Point high-gain mapping dish directly at Venus center
+      magellanProbe.lookAt(venus.position);
+
+      // Earth: Moon Orbit
+      moon.position.x = earth.position.x + Math.cos(time * 0.18) * 2.6;
+      moon.position.z = earth.position.z + Math.sin(time * 0.18) * 2.6;
+      moon.position.y = earth.position.y + Math.sin(time * 0.18 * 0.5) * 0.35; // Inclined orbit (5 degrees in real life)
+      moon.rotation.y += 0.001; // Synchronous rotation (approximate)
+
+      // Earth: International Space Station (ISS) Orbit (Low, fast orbit)
+      iss.position.x = earth.position.x + Math.cos(time * 0.85) * 1.55;
+      iss.position.z = earth.position.z + Math.sin(time * 0.85) * 1.55;
+      iss.position.y = earth.position.y + Math.sin(time * 0.85 * 0.8) * 0.25;
+      iss.lookAt(earth.position);
+      iss.rotateX(Math.PI / 2); // Keep solar panels aligned perpendicular to flight direction
       jupiter.rotation.y += 0.0068;
       saturnMesh.rotation.y += 0.0062;
       
