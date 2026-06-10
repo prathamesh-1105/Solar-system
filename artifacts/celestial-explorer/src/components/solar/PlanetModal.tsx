@@ -41,22 +41,22 @@ export default function PlanetModal({ planet, onClose }: PlanetModalProps) {
 
   return (
     <div 
-      className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-500 ${isVisible && planet ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-500 ${isVisible && planet ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
     >
       {/* Backdrop */}
       <div 
-        className="absolute inset-0 bg-black/60 backdrop-blur-md"
+        className="absolute inset-0 bg-black/60 backdrop-blur-md z-0"
         onClick={onClose}
       />
       
       {/* Modal Content */}
       <div 
-        className={`relative w-full max-w-2xl glass-panel p-8 md:p-12 overflow-hidden transition-all duration-500 transform ${isVisible && planet ? 'scale-100 translate-y-0' : 'scale-95 translate-y-8'}`}
+        className={`relative z-10 w-full max-w-2xl glass-panel p-8 md:p-12 overflow-hidden pointer-events-auto transition-all duration-500 transform ${isVisible && planet ? 'scale-100 translate-y-0' : 'scale-95 translate-y-8'}`}
         style={{ boxShadow: `0 0 40px ${planet?.color || 'rgba(255,255,255,0.1)'}` }}
       >
         <button 
           onClick={onClose}
-          className="absolute top-6 right-6 p-2 text-white/50 hover:text-white transition-colors z-30"
+          className="absolute top-6 right-6 p-2 text-white/50 hover:text-white transition-colors z-30 pointer-events-auto"
         >
           <X className="w-6 h-6" />
         </button>
