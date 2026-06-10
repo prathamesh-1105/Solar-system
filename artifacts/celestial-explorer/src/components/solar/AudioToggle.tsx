@@ -150,13 +150,13 @@ export default function AudioToggle() {
   return (
     <button 
       onClick={toggleAudio}
-      className="fixed bottom-8 right-8 z-50 p-4 rounded-full glass-panel hover:bg-white/10 transition-colors group interactive"
+      className="fixed bottom-4 right-4 md:bottom-8 md:right-8 z-50 p-3 md:p-4 rounded-full glass-panel hover:bg-white/10 transition-colors group interactive"
       aria-label="Toggle ambient audio"
     >
       {isPlaying ? (
-        <Volume2 className="w-6 h-6 text-emerald-400 group-hover:text-emerald-300 transition-colors duration-500" style={{ filter: 'drop-shadow(0 0 4px currentColor)' }} />
+        <Volume2 className="w-5 h-5 md:w-6 md:h-6 text-emerald-400 group-hover:text-emerald-300 transition-colors duration-500" style={{ filter: 'drop-shadow(0 0 4px currentColor)' }} />
       ) : (
-        <VolumeX className="w-6 h-6 text-white/50 group-hover:text-white/80" />
+        <VolumeX className="w-5 h-5 md:w-6 md:h-6 text-white/50 group-hover:text-white/80" />
       )}
     </button>
   );

@@ -33,15 +33,18 @@ export default function CustomCursor() {
 
     const onMouseOver = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (
-        target.tagName.toLowerCase() === 'button' ||
-        target.tagName.toLowerCase() === 'a' ||
-        target.closest('button') ||
-        target.closest('a') ||
-        target.classList.contains('interactive')
-      ) {
-        isHovering = true;
-      } else {
+      if (!target || !target.tagName) {
+        isHovering = false;
+        return;
+      }
+
+      try {
+        const isButton = target.tagName.toLowerCase() === 'button' || (target.closest && target.closest('button'));
+        const isLink = target.tagName.toLowerCase() === 'a' || (target.closest && target.closest('a'));
+        const isInteractive = (target.classList && target.classList.contains('interactive')) || (target.closest && target.closest('.interactive'));
+
+        isHovering = !!(isButton || isLink || isInteractive);
+      } catch (err) {
         isHovering = false;
       }
     };

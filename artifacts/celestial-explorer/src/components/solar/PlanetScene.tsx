@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import Lenis from 'lenis';
-import PlanetModal from './PlanetModal';
 
 // Post-processing imports
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -18,15 +17,150 @@ interface PlanetSceneProps {
 }
 
 const planetData = {
-  Sun: { name: 'The Sun', type: 'Yellow Dwarf Star', distance: '0 km', diameter: '1,392,684 km', moons: '0', atmosphere: 'Hydrogen, Helium', fact: 'The Sun accounts for 99.86% of the mass in the solar system.', color: '#FF5500' },
-  Mercury: { name: 'Mercury', type: 'Terrestrial Planet', distance: '57.9M km', diameter: '4,879 km', moons: '0', atmosphere: 'None', fact: 'A year on Mercury is 88 Earth days, but a solar day lasts 176 Earth days.', color: '#9C9C9C' },
-  Venus: { name: 'Venus', type: 'Terrestrial Planet', distance: '108.2M km', diameter: '12,104 km', moons: '0', atmosphere: 'Carbon Dioxide, Nitrogen', fact: 'Venus rotates backwards compared to most other planets.', color: '#E8C66A' },
-  Earth: { name: 'Earth', type: 'Terrestrial Planet', distance: '149.6M km', diameter: '12,742 km', moons: '1', atmosphere: 'Nitrogen, Oxygen', fact: 'The only known planet to harbor life.', color: '#3b82f6' },
-  Mars: { name: 'Mars', type: 'Terrestrial Planet', distance: '227.9M km', diameter: '6,779 km', moons: '2', atmosphere: 'Carbon Dioxide, Argon', fact: 'Home to Olympus Mons, the largest volcano in the solar system.', color: '#EF4444' },
-  Jupiter: { name: 'Jupiter', type: 'Gas Giant', distance: '778.5M km', diameter: '139,820 km', moons: '95', atmosphere: 'Hydrogen, Helium', fact: 'Jupiter\'s Great Red Spot is a giant storm larger than Earth.', color: '#F59E0B' },
-  Saturn: { name: 'Saturn', type: 'Gas Giant', distance: '1.43B km', diameter: '116,460 km', moons: '146', atmosphere: 'Hydrogen, Helium', fact: 'Saturn is the only planet that could float in water.', color: '#E5E7EB' },
-  Uranus: { name: 'Uranus', type: 'Ice Giant', distance: '2.87B km', diameter: '50,724 km', moons: '28', atmosphere: 'Hydrogen, Helium, Methane', fact: 'Uranus rotates on its side, making its seasons last 21 Earth years.', color: '#06B6D4' },
-  Neptune: { name: 'Neptune', type: 'Ice Giant', distance: '4.5B km', diameter: '49,244 km', moons: '16', atmosphere: 'Hydrogen, Helium, Methane', fact: 'Neptune has supersonic winds reaching speeds of 2,100 km/h.', color: '#3B82F6' }
+  Sun: {
+    name: 'The Sun',
+    type: 'Yellow Dwarf Star',
+    distance: '0 km',
+    diameter: '1,392,684 km',
+    moons: '0',
+    atmosphere: '73% Hydrogen, 25% Helium, 2% trace elements',
+    fact: 'The Sun accounts for 99.86% of the mass in the entire solar system.',
+    color: '#FF5500',
+    mass: '1.989 × 10^30 kg',
+    gravity: '274 m/s²',
+    temperature: '5,500°C to 15M°C',
+    orbitalPeriod: '230M Years (Galactic)',
+    coreComposition: 'Superdense plasma core undergoing proton-proton chain nuclear fusion.',
+    description: 'The Sun is a nearly perfect sphere of hot plasma at the center of our solar system, heated to incandescence by nuclear fusion reactions in its core. It radiates energy mainly as visible light, ultraviolet light, and infrared radiation. It is by far the most important source of energy for life on Earth, and its massive gravitational pull keeps all planets locked in their orbits.'
+  },
+  Mercury: {
+    name: 'Mercury',
+    type: 'Terrestrial Planet',
+    distance: '57.9M km',
+    diameter: '4,879 km',
+    moons: '0',
+    atmosphere: 'Ultra-thin exosphere of Helium, Sodium, and Oxygen',
+    fact: 'A year on Mercury is 88 Earth days, but a solar day lasts 176 Earth days.',
+    color: '#9C9C9C',
+    mass: '3.285 × 10^23 kg',
+    gravity: '3.7 m/s²',
+    temperature: '-180°C to 430°C',
+    orbitalPeriod: '88 Days',
+    coreComposition: 'Massive metallic iron core (representing 85% of its radius) with a thin rocky shell.',
+    description: 'Mercury is the smallest and closest planet to the Sun. Lacking a substantial atmosphere to trap heat, it experiences the most extreme temperature swings in the solar system. Its surface is heavily cratered, old, and geologically inactive, closely resembling Earth\'s Moon.'
+  },
+  Venus: {
+    name: 'Venus',
+    type: 'Terrestrial Planet',
+    distance: '108.2M km',
+    diameter: '12,104 km',
+    moons: '0',
+    atmosphere: 'Dense Carbon Dioxide (96.5%) and Nitrogen (3.5%)',
+    fact: 'Venus rotates backwards (retrograde) compared to most other planets.',
+    color: '#E8C66A',
+    mass: '4.867 × 10^24 kg',
+    gravity: '8.87 m/s²',
+    temperature: '465°C (Average)',
+    orbitalPeriod: '225 Days',
+    coreComposition: 'Iron-nickel core surrounded by a convective rocky mantle and thin silicate crust.',
+    description: 'Venus is often described as Earth\'s sister planet due to their similar size and mass. However, a runaway greenhouse effect makes it the hottest planet in the solar system, with surface pressures 92 times that of Earth. Basaltic volcanic plains and thick sulfuric acid cloud decks cover its hostile landscape.'
+  },
+  Earth: {
+    name: 'Earth',
+    type: 'Terrestrial Planet',
+    distance: '149.6M km',
+    diameter: '12,742 km',
+    moons: '1 (Luna)',
+    atmosphere: '78% Nitrogen, 21% Oxygen, 1% Argon & trace gases',
+    fact: 'The only known planet in the universe to harbor life and active liquid water oceans.',
+    color: '#3b82f6',
+    mass: '5.972 × 10^24 kg',
+    gravity: '9.81 m/s²',
+    temperature: '-89°C to 58°C',
+    orbitalPeriod: '365.25 Days',
+    coreComposition: 'Solid iron-nickel inner core, liquid outer core, viscous mantle, and solid crust.',
+    description: 'Earth is our home planet and the third body from the Sun. It is unique in hosting a dynamic biosphere capable of supporting complex life. Its active plate tectonics, strong magnetosphere, and oxygen-rich atmosphere create a balanced feedback loop that maintains liquid surface water.'
+  },
+  Mars: {
+    name: 'Mars',
+    type: 'Terrestrial Planet',
+    distance: '227.9M km',
+    diameter: '6,779 km',
+    moons: '2 (Phobos, Deimos)',
+    atmosphere: '95.3% Carbon Dioxide, 2.7% Nitrogen, 1.6% Argon',
+    fact: 'Home to Olympus Mons, the largest volcano in the solar system, and Valles Marineris canyon.',
+    color: '#EF4444',
+    mass: '6.390 × 10^23 kg',
+    gravity: '3.71 m/s²',
+    temperature: '-140°C to 20°C',
+    orbitalPeriod: '687 Days',
+    coreComposition: 'Solid iron, nickel, and sulfur core, rocky silicate mantle, and iron-oxide crust.',
+    description: 'Mars is a cold, dry desert world often called the Red Planet due to the iron-oxide dust coating its surface. While its atmosphere is thin, Mars features polar ice caps, ancient lake beds, and giant volcanic formations, suggesting it once had a warm, wet environment suitable for life.'
+  },
+  Jupiter: {
+    name: 'Jupiter',
+    type: 'Gas Giant',
+    distance: '778.5M km',
+    diameter: '139,820 km',
+    moons: '95 (Io, Europa, Ganymede, Callisto)',
+    atmosphere: '89.8% Hydrogen, 10.2% Helium',
+    fact: 'Jupiter\'s Great Red Spot is a giant anticyclonic storm wider than the planet Earth.',
+    color: '#F59E0B',
+    mass: '1.898 × 10^27 kg',
+    gravity: '24.79 m/s²',
+    temperature: '-110°C (Average)',
+    orbitalPeriod: '11.86 Years',
+    coreComposition: 'Dense central rock-and-ice core under high pressure, wrapped in liquid metallic hydrogen.',
+    description: 'Jupiter is the largest planet in our solar system, carrying more mass than all other planets combined. Lacking a solid surface, it consists of layered hydrogen and helium. Its rapid rotation creates strong jet streams, swirling cloud belts, and a powerful magnetosphere that holds 95 moons.'
+  },
+  Saturn: {
+    name: 'Saturn',
+    type: 'Gas Giant',
+    distance: '1.43B km',
+    diameter: '116,460 km',
+    moons: '146 (Titan, Enceladus, Mimas)',
+    atmosphere: '96.3% Hydrogen, 3.2% Helium, minor methane',
+    fact: 'Saturn\'s density is so low that the entire planet would float in water.',
+    color: '#E5E7EB',
+    mass: '5.683 × 10^26 kg',
+    gravity: '10.44 m/s²',
+    temperature: '-140°C (Average)',
+    orbitalPeriod: '29.45 Years',
+    coreComposition: 'Rocky-iron core surrounded by liquid metallic hydrogen and a thick gaseous outer envelope.',
+    description: 'Saturn is the sixth planet from the Sun, renowned for its extensive, brilliant ring system composed of billions of ice particles and rock fragments. It has the lowest density of any planet. Its moon Titan is the second largest in the solar system and features liquid methane lakes.'
+  },
+  Uranus: {
+    name: 'Uranus',
+    type: 'Ice Giant',
+    distance: '2.87B km',
+    diameter: '50,724 km',
+    moons: '28 (Titania, Oberon, Ariel, Umbriel)',
+    atmosphere: '82.5% Hydrogen, 15.2% Helium, 2.3% Methane',
+    fact: 'Uranus rotates on an extreme 98-degree tilt, effectively rolling on its side.',
+    color: '#06B6D4',
+    mass: '8.681 × 10^25 kg',
+    gravity: '8.69 m/s²',
+    temperature: '-224°C (Coldest)',
+    orbitalPeriod: '84 Years',
+    coreComposition: 'Rocky core, icy mantle of water, ammonia, and methane mud, and gaseous envelope.',
+    description: 'Uranus is an ice giant with a blue-green tint caused by methane gas in its atmosphere. Its extraordinary tilt causes extreme seasonal changes, resulting in 42 years of continuous sunlight followed by 42 years of darkness at its poles. It features a system of 13 vertical rings.'
+  },
+  Neptune: {
+    name: 'Neptune',
+    type: 'Ice Giant',
+    distance: '4.5B km',
+    diameter: '49,244 km',
+    moons: '16 (Triton, Nereid, Proteus)',
+    atmosphere: '80% Hydrogen, 19% Helium, 1.5% Methane',
+    fact: 'Neptune has the fastest winds in the solar system, reaching speeds up to 2,100 km/h.',
+    color: '#3B82F6',
+    mass: '1.024 × 10^26 kg',
+    gravity: '11.15 m/s²',
+    temperature: '-200°C (Average)',
+    orbitalPeriod: '164.8 Years',
+    coreComposition: 'Nickel-iron core, convective icy mantle, and gaseous outer hydrogen-helium-methane layers.',
+    description: 'Neptune is the most distant planet in our solar system. A deep blue ice giant, its atmosphere is driven by internal heat, generating the most violent storms and supersonic winds in the solar system. Its largest moon, Triton, orbits Neptune in the opposite direction of the planet\'s rotation.'
+  }
 };
 
 function isWebGLAvailable(): boolean {
@@ -405,6 +539,140 @@ const saturnShaders = {
   }
 };
 
+const voiceTelemetryLines = {
+  Sun: "Flight deck control. Warning: Proximity danger. Approaching Yellow Dwarf Star, the Sun. Thermal deflectors at maximum output.",
+  Mercury: "Telemetry scan lock confirmed on Mercury. Commencing metallic core analysis. Extreme surface heat detected.",
+  Venus: "Entering outer atmospheric layers of Venus. Acid storm activity registered. Surface pressure levels extremely high.",
+  Earth: "Entering Earth orbital sector. Nitrogen-oxygen atmosphere confirmed. Homeworld connection established. Welcome back, pilot.",
+  Mars: "Establishing scan lock on Mars. Red planet dust storms active. Scanning Olympus Mons caldera coordinates.",
+  Jupiter: "Caution: Approaching gas giant Jupiter. Severe magnetosphere radiation detected. Tracking Great Red Spot storm vortex.",
+  Saturn: "Orbital sweep of Saturn rings initialized. Billions of ice particulate counts recorded. Titan relay link is active.",
+  Uranus: "Focused sweep on Uranus complete. Ice giant gas envelope locked. Scanning vertical ring structure.",
+  Neptune: "Entering Neptune orbital transit. Supersonic wind activity detected. Tracking storm systems at extreme distance."
+};
+
+const playRadioBeep = (type: 'start' | 'end') => {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    
+    // Quindar tone: 2525 Hz for start, 2675 Hz for end, duration 250ms
+    const freq = type === 'start' ? 2525 : 2675;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.04, ctx.currentTime + 0.02);
+    gain.gain.setValueAtTime(0.04, ctx.currentTime + 0.22);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
+    
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    osc.start();
+    osc.stop(ctx.currentTime + 0.25);
+  } catch (e) {
+    console.error("Audio error", e);
+  }
+};
+
+const playRadioStatic = () => {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    
+    const bufferSize = ctx.sampleRate * 0.1; // 100ms
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 1000; // focused radio band
+    filter.Q.value = 1.0;
+    
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.02, ctx.currentTime + 0.01);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.1);
+    
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    
+    noise.start();
+  } catch (e) {
+    console.error("Static error", e);
+  }
+};
+
+const triggerAstronautVoice = (planetName: string) => {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return;
+
+  // Cancel any ongoing speech first so they don't overlap
+  window.speechSynthesis.cancel();
+
+  // Play intro beep and static click
+  playRadioBeep('start');
+  setTimeout(() => {
+    playRadioStatic();
+  }, 250);
+
+  // Get the voice lines
+  const phrase = voiceTelemetryLines[planetName as keyof typeof voiceTelemetryLines] || `Entering focused scan coordinates for ${planetName}.`;
+
+  const utterance = new SpeechSynthesisUtterance(phrase);
+  
+  // Find a suitable voice (prefer a typical male English voice first)
+  const voices = window.speechSynthesis.getVoices();
+  const enVoices = voices.filter(v => v.lang.startsWith('en'));
+  
+  // Search for typical male names in the voices list
+  const maleNames = ['male', 'david', 'mark', 'george', 'james', 'guy', 'andrew', 'brian', 'stefan', 'richard'];
+  const maleVoice = enVoices.find(v => {
+    const nameLower = v.name.toLowerCase();
+    return maleNames.some(m => nameLower.includes(m));
+  });
+  
+  const enVoice = maleVoice 
+                || enVoices.find(v => v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Microsoft'))
+                || enVoices[0] 
+                || voices[0];
+  
+  if (enVoice) {
+    utterance.voice = enVoice;
+  }
+  
+  // Customizations to sound like a radio transmission
+  // Slightly lower pitch for a calm, professional male astronaut voice, slow structured rate
+  utterance.pitch = 0.92; 
+  utterance.rate = 0.88;  
+  utterance.volume = 0.85;
+
+  utterance.onend = () => {
+    // Play closing beep
+    playRadioStatic();
+    setTimeout(() => {
+      playRadioBeep('end');
+    }, 100);
+  };
+
+  // Small delay to let the beep play first
+  setTimeout(() => {
+    window.speechSynthesis.speak(utterance);
+  }, 300);
+};
+
 export default function PlanetScene({ loaded }: PlanetSceneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -418,8 +686,8 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
   const hudWarnRef = useRef<HTMLDivElement>(null);
   const hudProgressRef = useRef<SVGCircleElement>(null);
   
-  const [selectedPlanet, setSelectedPlanet] = useState<any | null>(null);
   const [webglError, setWebglError] = useState(false);
+  const spokenPlanetRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!loaded || !canvasRef.current || !containerRef.current) return;
@@ -1136,9 +1404,9 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     scene.add(mroProbe);
  
     // 6. INSTANCED 3D ASTEROID BELT (Awwwards optimization - 1 draw call!)
-    const asteroidCount = 1200;
-    // Create random displaced rock geometries (deformed non-uniformly for potato-like shapes)
-    const rockGeo = addDisposable(new THREE.DodecahedronGeometry(0.08, 1));
+    const asteroidCount = 2200;
+    // Create random displaced rock geometries (deformed non-uniformly for potato-like shapes, scaled up for high visibility)
+    const rockGeo = addDisposable(new THREE.DodecahedronGeometry(0.22, 1));
     const rockPosAttr = rockGeo.attributes.position;
     for (let i = 0; i < rockPosAttr.count; i++) {
       const x = rockPosAttr.getX(i);
@@ -1154,9 +1422,10 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
  
     const rockMat = addDisposable(new THREE.MeshStandardMaterial({
       bumpMap: texMercury, // Use cratered Mercury texture as a high-graphics bump map
-      bumpScale: 0.045,
-      roughness: 0.95,
-      metalness: 0.05
+      bumpScale: 0.05,
+      roughness: 0.8,
+      metalness: 0.1,
+      emissive: new THREE.Color(0x181512) // Subtle ambient glow so shadow-side of rocks is visible against space
     }));
  
     const asteroidBelt = new THREE.InstancedMesh(rockGeo, rockMat, asteroidCount);
@@ -1172,18 +1441,14 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       const randRegion = Math.random();
       let radius, zVal;
       
-      if (randRegion < 0.65) {
-        // Main Asteroid Belt (between Mars -160 and Jupiter -220)
-        zVal = -190 + (Math.random() - 0.5) * 50;
-        radius = 8.5 + Math.random() * 15.0;
-      } else if (randRegion < 0.85) {
-        // Inner Solar System (between Sun 0 and Mars -160)
-        zVal = -20 - Math.random() * 140; 
-        radius = 6.0 + Math.random() * 12.0;
+      if (randRegion < 0.85) {
+        // Main Asteroid Belt (concentrated between Mars -153 and Jupiter -212)
+        zVal = -182.5 + (Math.random() - 0.5) * 30; // 30 units wide along Z-axis
+        radius = 5.2 + Math.random() * 6.5; // Concentrated ring radius 5.2 to 11.7
       } else {
-        // Outer Solar System (between Jupiter -220 and Neptune -430)
-        zVal = -225 - Math.random() * 215;
-        radius = 9.0 + Math.random() * 18.0;
+        // Outer Solar System stray dust (between Jupiter -222 and Neptune -418)
+        zVal = -220 - Math.random() * 200;
+        radius = 6.0 + Math.random() * 12.0;
       }
       
       const x = Math.cos(angle) * radius;
@@ -1193,25 +1458,25 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       dummy.position.set(x, y, z);
       dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
       
-      const s = 0.35 + Math.random() * 1.1;
+      const s = 0.5 + Math.random() * 1.5;
       dummy.scale.set(s, s, s);
       dummy.updateMatrix();
       asteroidBelt.setMatrixAt(i, dummy.matrix);
       
-      // Random organic color variation for C-type, S-type, and M-type asteroids
+      // Random organic color variation for C-type, S-type, and M-type asteroids (boosted brightness)
       const typeRand = Math.random();
       let rColor;
       if (typeRand < 0.65) {
-        // C-type (dark carbonaceous): dark grey-brown
-        const grey = 0.22 + Math.random() * 0.12;
+        // C-type (dark carbonaceous): medium-dark grey-brown
+        const grey = 0.35 + Math.random() * 0.15;
         rColor = new THREE.Color(grey * 1.05, grey * 0.95, grey * 0.9);
       } else if (typeRand < 0.9) {
-        // S-type (stony/silicate): lighter brownish-grey
-        const grey = 0.45 + Math.random() * 0.15;
+        // S-type (stony/silicate): light brownish-grey
+        const grey = 0.6 + Math.random() * 0.15;
         rColor = new THREE.Color(grey * 1.1, grey * 1.0, grey * 0.9);
       } else {
         // M-type (metallic): reddish/rusty-grey
-        const grey = 0.35 + Math.random() * 0.1;
+        const grey = 0.5 + Math.random() * 0.15;
         rColor = new THREE.Color(grey * 1.25, grey * 0.95, grey * 0.85);
       }
       asteroidBelt.setColorAt(i, rColor);
@@ -1614,24 +1879,14 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     const mouse = new THREE.Vector2();
     let currentMouseNDCX = 0, currentMouseNDCY = 0;
 
-    const onMouseClick = () => {
-      const intersects = raycaster.intersectObjects(interactableMeshes, false);
-      if (intersects.length > 0) {
-        const mesh = intersects[0].object;
-        let name = mesh.userData.name;
-        if (!name && mesh.parent) name = mesh.parent.children[0].userData.name;
-        if (name && planetData[name as keyof typeof planetData]) {
-          setSelectedPlanet(planetData[name as keyof typeof planetData]);
-        }
-      }
-    };
-
     const onMouseMove = (e: MouseEvent) => {
       currentMouseNDCX = (e.clientX / window.innerWidth) * 2 - 1;
       currentMouseNDCY = -(e.clientY / window.innerHeight) * 2 + 1;
       mouse.x = currentMouseNDCX;
       mouse.y = currentMouseNDCY;
       
+      raycaster.setFromCamera(mouse, camera);
+
       const intersects = raycaster.intersectObjects(interactableMeshes, false);
       let hoveredObj = null;
       if (intersects.length > 0) {
@@ -1653,7 +1908,6 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       });
     };
 
-    window.addEventListener('click', onMouseClick);
     window.addEventListener('mousemove', onMouseMove);
 
     // --- ANIMATION LOOP ---
@@ -1715,6 +1969,16 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
           nearestColor = planetData[name as keyof typeof planetData]?.color || "#10B981";
         }
       });
+
+      // Voice announcements trigger when close to a planet
+      if (nearestDist < 25) {
+        if (spokenPlanetRef.current !== nearestName) {
+          spokenPlanetRef.current = nearestName;
+          triggerAstronautVoice(nearestName);
+        }
+      } else {
+        spokenPlanetRef.current = null;
+      }
 
       // Natural axis auto-rotations (relative relative speeds)
       sun.rotation.y += 0.0006;
@@ -2024,7 +2288,6 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     return () => {
       isMounted = false;
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('click', onMouseClick);
       window.removeEventListener('mousemove', onMouseMove);
       cancelAnimationFrame(frame);
       ScrollTrigger.getAll().forEach(t => t.kill());
@@ -2047,25 +2310,40 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
   const renderInfoPanel = (key: keyof typeof planetData, alignment: 'start'|'end', planetColor: string) => {
     const data = planetData[key];
     return (
-      <section className={`h-screen w-full flex items-center justify-${alignment} px-12 md:px-24 xl:px-48`}>
-        <div className="reveal-text glass-panel p-8 max-w-sm pointer-events-auto relative overflow-hidden" 
+      <section className={`h-screen w-full flex items-center justify-${alignment} px-6 md:px-16 xl:px-32`}>
+        <div className="reveal-text glass-panel p-6 md:p-8 w-full max-w-md pointer-events-auto relative overflow-hidden" 
              style={{ borderLeft: `3px solid ${planetColor}`, boxShadow: `0 0 30px -10px ${planetColor}33` }}>
           <div className="absolute top-4 right-4 px-2.5 py-0.5 rounded-full border border-white/10 text-[9px] font-mono tracking-wider text-white/40 bg-white/5">
             {data.type.toUpperCase()}
           </div>
-          <h2 className="text-4xl font-display font-black mb-5 tracking-wide" style={{ color: planetColor }}>{data.name.toUpperCase()}</h2>
-          <div className="space-y-3 font-mono text-[11px] text-white/70 uppercase">
-            <div className="flex justify-between border-b border-white/5 pb-1.5"><span>Diameter</span> <span className="text-white font-medium">{data.diameter}</span></div>
-            <div className="flex justify-between border-b border-white/5 pb-1.5"><span>Distance</span> <span className="text-white font-medium">{data.distance}</span></div>
-            <div className="flex justify-between border-b border-white/5 pb-1.5"><span>Moons</span> <span className="text-white font-medium">{data.moons}</span></div>
-            <div className="flex justify-between pb-1.5"><span>Atmos</span> <span className="text-white font-medium">{data.atmosphere}</span></div>
+          
+          <h2 className="text-3xl md:text-4xl font-display font-black mb-3 tracking-wide" style={{ color: planetColor }}>
+            {data.name.toUpperCase()}
+          </h2>
+          
+          {data.description && (
+            <p className="text-white/80 text-[11px] md:text-xs leading-relaxed mb-4 font-sans">
+              {data.description}
+            </p>
+          )}
+
+          <div className="space-y-2 font-mono text-[9px] md:text-[10px] text-white/70 uppercase mb-4 border-t border-b border-white/5 py-3">
+            <div className="flex justify-between border-b border-white/5 pb-1"><span>Diameter</span> <span className="text-white font-medium">{data.diameter}</span></div>
+            <div className="flex justify-between border-b border-white/5 pb-1"><span>Distance</span> <span className="text-white font-medium">{data.distance}</span></div>
+            <div className="flex justify-between border-b border-white/5 pb-1"><span>Orbit Period</span> <span className="text-white font-medium">{data.orbitalPeriod || 'N/A'}</span></div>
+            <div className="flex justify-between border-b border-white/5 pb-1"><span>Moons</span> <span className="text-white font-medium">{data.moons}</span></div>
+            <div className="flex justify-between border-b border-white/5 pb-1"><span>Gravity</span> <span className="text-white font-medium">{data.gravity || 'N/A'}</span></div>
+            <div className="flex justify-between border-b border-white/5 pb-1"><span>Surface Temp</span> <span className="text-white font-medium">{data.temperature || 'N/A'}</span></div>
+            <div className="flex justify-between border-b border-white/5 pb-1"><span>Atmos</span> <span className="text-white font-medium">{data.atmosphere}</span></div>
+            <div className="flex justify-between pb-1"><span>Core</span> <span className="text-white font-medium text-right truncate max-w-[180px]">{data.coreComposition || 'Unknown'}</span></div>
           </div>
-          <button 
-            className="explore-btn interactive"
-            onClick={() => setSelectedPlanet(data)}
-          >
-            Access Core Files
-          </button>
+
+          <div className="bg-white/5 rounded p-2.5 border border-white/5">
+            <p className="text-white/30 text-[8px] font-mono mb-1 tracking-wider">CELESTIAL FACT</p>
+            <p className="text-[10px] md:text-[11px] text-white/80 italic leading-relaxed">
+              "{data.fact}"
+            </p>
+          </div>
         </div>
       </section>
     );
@@ -2097,7 +2375,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
         >
           {/* HUD Top Bar */}
           <div className="flex justify-between items-start">
-            <div className="flex flex-col gap-1.5 bg-black/55 backdrop-blur-md p-3 border border-white/10 rounded-lg max-w-xs transition-colors duration-500"
+            <div className="hidden md:flex flex-col gap-1.5 bg-black/55 backdrop-blur-md p-3 border border-white/10 rounded-lg max-w-xs transition-colors duration-500"
                  style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
               <div>SYS ID: <span className="text-white font-semibold">NASA-APL-CE-09</span></div>
               <div>SECTOR: <span className="text-white">SOLAR SYSTEM</span></div>
@@ -2105,11 +2383,11 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
             </div>
 
             {/* Warning overlay alerts */}
-            <div ref={hudWarnRef} className="text-[12px] font-bold text-red-500 animate-pulse bg-red-950/40 border border-red-500/20 px-4 py-2.5 rounded-lg opacity-0 transition-opacity duration-300 pointer-events-none select-none max-w-sm text-center shadow-[0_0_20px_rgba(239,68,68,0.2)]">
+            <div ref={hudWarnRef} className="text-[10px] md:text-[12px] font-bold text-red-500 animate-pulse bg-red-950/40 border border-red-500/20 px-4 py-2.5 rounded-lg opacity-0 transition-opacity duration-300 pointer-events-none select-none max-w-[80vw] md:max-w-sm text-center shadow-[0_0_20px_rgba(239,68,68,0.2)]">
               ALERT: ENCOUNTERING HIGH SOLAR THERMAL RESISTANCE
             </div>
             
-            <div className="flex flex-col items-end gap-1.5 bg-black/55 backdrop-blur-md p-3 border border-white/10 rounded-lg text-right"
+            <div className="hidden md:flex flex-col items-end gap-1.5 bg-black/55 backdrop-blur-md p-3 border border-white/10 rounded-lg text-right"
                  style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
               <div ref={hudSpeedRef}>VELOCITY: 0.0 LY/S</div>
               <div>AUTOPILOT: <span className="text-white font-semibold">WARP ACTIVE</span></div>
@@ -2119,7 +2397,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
 
           {/* HUD Middle Reticle and Progress Lock */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="relative w-44 h-44 flex items-center justify-center">
+            <div className="relative w-36 h-36 md:w-44 md:h-44 flex items-center justify-center">
               <svg className="w-full h-full opacity-35" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)', color: 'var(--hud-color)' }}>
                 <circle cx="50" cy="50" r="30" stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" fill="none" />
                 <circle 
@@ -2136,16 +2414,16 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
                 />
               </svg>
               
-              <div className="absolute w-24 h-24 border border-dashed rounded-full opacity-15 animate-spin" style={{ animationDuration: '40s', borderColor: 'var(--hud-color)' }} />
-              <div className="absolute w-12 h-12 border rounded-full opacity-25" style={{ borderColor: 'var(--hud-color)' }} />
+              <div className="absolute w-20 h-20 md:w-24 md:h-24 border border-dashed rounded-full opacity-15 animate-spin" style={{ animationDuration: '40s', borderColor: 'var(--hud-color)' }} />
+              <div className="absolute w-10 h-10 md:w-12 md:h-12 border rounded-full opacity-25" style={{ borderColor: 'var(--hud-color)' }} />
               <div className="absolute w-1.5 h-1.5 rounded-full bg-white opacity-80" />
-              <div ref={hudTargetRef} className="absolute mt-24 text-[8px] text-center font-bold tracking-widest w-40 text-white/80">LOCKING...</div>
+              <div ref={hudTargetRef} className="absolute mt-20 md:mt-24 text-[7px] md:text-[8px] text-center font-bold tracking-widest w-40 text-white/80">LOCKING...</div>
             </div>
           </div>
 
           {/* HUD Bottom telemetry */}
           <div className="flex justify-between items-end">
-            <div className="flex flex-col gap-1 bg-black/55 backdrop-blur-md p-3 border border-white/10 rounded-lg max-w-[190px]"
+            <div className="hidden md:flex flex-col gap-1 bg-black/55 backdrop-blur-md p-3 border border-white/10 rounded-lg max-w-[190px]"
                  style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
               <div className="font-bold text-[9px] text-white/40 mb-1">NAV TELEMETRY</div>
               <div ref={hudScanDataRef} className="text-white/80 leading-relaxed text-[9px] transition-all duration-300 opacity-0">
@@ -2156,7 +2434,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
               </div>
             </div>
             
-            <div className="text-right text-[8px] text-white/30 max-w-xs pointer-events-none select-none">
+            <div className="hidden md:block text-right text-[8px] text-white/30 max-w-xs pointer-events-none select-none">
               HUD SYSTEMS v4.11 / VERIFIED PILOT CONTEXT
             </div>
           </div>
@@ -2165,13 +2443,13 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
         {/* Info panels overlay */}
         <div className="relative z-10 w-full pointer-events-none">
           <section className="h-screen w-full flex flex-col items-center justify-center text-center px-4">
-            <h1 className="reveal-text text-5xl md:text-7xl lg:text-9xl font-display font-black tracking-[0.25em] text-white drop-shadow-[0_0_25px_rgba(255,255,255,0.25)]">
+            <h1 className="reveal-text text-4xl sm:text-5xl md:text-7xl lg:text-9xl font-display font-black tracking-[0.15em] sm:tracking-[0.25em] text-white drop-shadow-[0_0_25px_rgba(255,255,255,0.25)]">
               CELESTIAL<br/>EXPLORER
             </h1>
-            <p className="reveal-text mt-8 text-lg md:text-xl text-white/50 font-sans max-w-xl tracking-[0.3em] uppercase">
+            <p className="reveal-text mt-6 md:mt-8 text-xs sm:text-lg md:text-xl text-white/50 font-sans max-w-xl tracking-[0.2em] sm:tracking-[0.3em] uppercase">
               Voyage through the cosmic architecture
             </p>
-            <div className="absolute bottom-10 animate-bounce text-white/20 font-mono text-[9px] tracking-widest">
+            <div className="absolute bottom-10 animate-bounce text-white/20 font-mono text-[8px] sm:text-[9px] tracking-widest">
               ↓ SCROLL ENGINES TO IGNITE WARP DRIVE ↓
             </div>
           </section>
@@ -2187,20 +2465,16 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
           {renderInfoPanel('Neptune', 'start', planetData.Neptune.color)}
           
           <section className="h-screen w-full flex flex-col items-center justify-center text-center px-4 relative">
-            <h2 className="reveal-text text-4xl md:text-6xl font-display font-black tracking-[0.2em] text-white/90">
+            <h2 className="reveal-text text-2xl sm:text-4xl md:text-6xl font-display font-black tracking-[0.15em] sm:tracking-[0.2em] text-white/90">
               DEEP EXPEDITION COMPLETE
             </h2>
-            <p className="reveal-text mt-4 text-xs md:text-sm text-white/45 font-mono max-w-md uppercase tracking-widest">
+            <p className="reveal-text mt-4 text-[10px] sm:text-sm text-white/45 font-mono max-w-md uppercase tracking-widest">
               System monitoring active. You have completed the orbital transit path.
             </p>
           </section>
         </div>
       </div>
 
-      <PlanetModal 
-        planet={selectedPlanet} 
-        onClose={() => setSelectedPlanet(null)} 
-      />
     </>
   );
 }

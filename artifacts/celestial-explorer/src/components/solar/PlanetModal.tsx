@@ -10,6 +10,12 @@ interface PlanetData {
   atmosphere: string;
   fact: string;
   color: string;
+  mass?: string;
+  gravity?: string;
+  temperature?: string;
+  orbitalPeriod?: string;
+  description?: string;
+  coreComposition?: string;
 }
 
 interface PlanetModalProps {
@@ -51,7 +57,7 @@ export default function PlanetModal({ planet, onClose }: PlanetModalProps) {
       
       {/* Modal Content */}
       <div 
-        className={`relative z-10 w-full max-w-2xl glass-panel p-8 md:p-12 overflow-hidden pointer-events-auto transition-all duration-500 transform ${isVisible && planet ? 'scale-100 translate-y-0' : 'scale-95 translate-y-8'}`}
+        className={`relative z-10 w-full max-w-3xl glass-panel p-8 md:p-12 overflow-hidden pointer-events-auto transition-all duration-500 transform ${isVisible && planet ? 'scale-100 translate-y-0' : 'scale-95 translate-y-8'}`}
         style={{ boxShadow: `0 0 40px ${planet?.color || 'rgba(255,255,255,0.1)'}` }}
       >
         <button 
@@ -67,32 +73,59 @@ export default function PlanetModal({ planet, onClose }: PlanetModalProps) {
             {planet?.name}
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-            <div className="space-y-6 text-white/80">
-              <div>
-                <p className="text-white/40 text-xs font-mono mb-1">DISTANCE FROM SUN</p>
-                <p className="text-xl font-medium">{planet?.distance}</p>
-              </div>
-              <div>
-                <p className="text-white/40 text-xs font-mono mb-1">DIAMETER</p>
-                <p className="text-xl font-medium">{planet?.diameter}</p>
-              </div>
+          {/* Quick Stats Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8 text-white/80">
+            <div>
+              <p className="text-white/40 text-[10px] font-mono mb-1 tracking-widest">DISTANCE FROM SUN</p>
+              <p className="text-lg font-medium">{planet?.distance}</p>
             </div>
-            <div className="space-y-6 text-white/80">
-              <div>
-                <p className="text-white/40 text-xs font-mono mb-1">MOONS</p>
-                <p className="text-xl font-medium">{planet?.moons}</p>
-              </div>
-              <div>
-                <p className="text-white/40 text-xs font-mono mb-1">ATMOSPHERE</p>
-                <p className="text-xl font-medium">{planet?.atmosphere}</p>
-              </div>
+            <div>
+              <p className="text-white/40 text-[10px] font-mono mb-1 tracking-widest">DIAMETER</p>
+              <p className="text-lg font-medium">{planet?.diameter}</p>
+            </div>
+            <div>
+              <p className="text-white/40 text-[10px] font-mono mb-1 tracking-widest">ORBITAL PERIOD</p>
+              <p className="text-lg font-medium">{planet?.orbitalPeriod || 'N/A'}</p>
+            </div>
+            <div>
+              <p className="text-white/40 text-[10px] font-mono mb-1 tracking-widest">MOONS</p>
+              <p className="text-lg font-medium">{planet?.moons}</p>
+            </div>
+            <div>
+              <p className="text-white/40 text-[10px] font-mono mb-1 tracking-widest">SURFACE GRAVITY</p>
+              <p className="text-lg font-medium">{planet?.gravity || 'N/A'}</p>
+            </div>
+            <div>
+              <p className="text-white/40 text-[10px] font-mono mb-1 tracking-widest">SURFACE TEMP</p>
+              <p className="text-lg font-medium">{planet?.temperature || 'N/A'}</p>
+            </div>
+          </div>
+
+          {/* Description Paragraph */}
+          {planet?.description && (
+            <div className="pt-6 border-t border-white/10 mb-6">
+              <p className="text-white/40 text-[10px] font-mono mb-2 tracking-widest">MISSION BRIEF / TELEMETRY SUMMARY</p>
+              <p className="text-base text-white/90 leading-relaxed font-sans">
+                {planet?.description}
+              </p>
+            </div>
+          )}
+
+          {/* Core & Atmosphere Section */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-white/10 mb-6">
+            <div>
+              <p className="text-white/40 text-[10px] font-mono mb-1 tracking-widest">ATMOSPHERIC COMPOSITION</p>
+              <p className="text-sm text-white/85 leading-relaxed">{planet?.atmosphere}</p>
+            </div>
+            <div>
+              <p className="text-white/40 text-[10px] font-mono mb-1 tracking-widest">CORE STRUCTURE</p>
+              <p className="text-sm text-white/85 leading-relaxed">{planet?.coreComposition || 'Unknown'}</p>
             </div>
           </div>
 
           <div className="pt-6 border-t border-white/10">
-            <p className="text-white/40 text-xs font-mono mb-2">NOTABLE FACT</p>
-            <p className="text-lg text-white/90 italic leading-relaxed">
+            <p className="text-white/40 text-[10px] font-mono mb-2 tracking-widest">NOTABLE CELESTIAL FACT</p>
+            <p className="text-base text-white/90 italic leading-relaxed pl-4 border-l-2" style={{ borderColor: planet?.color || 'rgba(255,255,255,0.2)' }}>
               "{planet?.fact}"
             </p>
           </div>
