@@ -792,6 +792,47 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       sprite.scale.set(size, size, 1);
       sun.add(sprite);
     });
+
+    // NASA's Parker Solar Probe orbiting the Sun (dives through outer corona)
+    const parkerProbe = new THREE.Group();
+    const probeBody = new THREE.Mesh(
+      addDisposable(new THREE.BoxGeometry(0.05, 0.05, 0.05)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0xd4af37, // Gold foil bus
+        metalness: 0.85,
+        roughness: 0.15
+      }))
+    );
+    parkerProbe.add(probeBody);
+
+    const heatShield = new THREE.Mesh(
+      addDisposable(new THREE.CylinderGeometry(0.08, 0.08, 0.015, 8)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0xfafafa, // White alumina heat shield
+        roughness: 0.6,
+        metalness: 0.1
+      }))
+    );
+    heatShield.rotation.x = Math.PI / 2;
+    heatShield.position.z = 0.03; // Face the Sun
+    parkerProbe.add(heatShield);
+
+    const panelLeft = new THREE.Mesh(
+      addDisposable(new THREE.BoxGeometry(0.12, 0.025, 0.004)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0x1a365d, // Blue-grey solar array
+        metalness: 0.5,
+        roughness: 0.2
+      }))
+    );
+    panelLeft.position.set(-0.08, 0, 0);
+    parkerProbe.add(panelLeft);
+
+    const panelRight = panelLeft.clone();
+    panelRight.position.set(0.08, 0, 0);
+    parkerProbe.add(panelRight);
+
+    scene.add(parkerProbe);
  
     // 2. MERCURY (Low segment far, high near - lod balance)
     const mercury = new THREE.Mesh(
@@ -810,6 +851,47 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     scene.add(mercury);
     planets['Mercury'] = mercury;
     interactableMeshes.push(mercury);
+
+    // NASA's MESSENGER spacecraft orbiting Mercury
+    const messengerProbe = new THREE.Group();
+    const messengerBody = new THREE.Mesh(
+      addDisposable(new THREE.BoxGeometry(0.03, 0.03, 0.03)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0xa8a8a8, // Silver bus
+        metalness: 0.85,
+        roughness: 0.15
+      }))
+    );
+    messengerProbe.add(messengerBody);
+
+    const sunshade = new THREE.Mesh(
+      addDisposable(new THREE.CylinderGeometry(0.045, 0.045, 0.005, 12, 1, true, 0, Math.PI)), // Curved sunshield
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0xeaeaea,
+        side: THREE.DoubleSide,
+        roughness: 0.6
+      }))
+    );
+    sunshade.position.z = 0.018;
+    sunshade.rotation.y = Math.PI / 2;
+    messengerProbe.add(sunshade);
+
+    const mPanelLeft = new THREE.Mesh(
+      addDisposable(new THREE.BoxGeometry(0.07, 0.02, 0.003)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0x1a365d,
+        metalness: 0.5,
+        roughness: 0.3
+      }))
+    );
+    mPanelLeft.position.set(-0.05, 0, 0);
+    messengerProbe.add(mPanelLeft);
+
+    const mPanelRight = mPanelLeft.clone();
+    mPanelRight.position.set(0.05, 0, 0);
+    messengerProbe.add(mPanelRight);
+
+    scene.add(messengerProbe);
  
     // 3. VENUS (Custom volumetric shader simulating hot dense atmosphere & cloud super-rotation)
     const venusMat = addDisposable(new THREE.ShaderMaterial({
@@ -1288,6 +1370,20 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       deimos.position.x = Math.cos(time * 0.5 + 2.0) * 1.6;
       deimos.position.z = Math.sin(time * 0.5 + 2.0) * 1.6;
       deimos.rotation.y += 0.01;
+
+      // Sun: Parker Solar Probe Orbit (Close solar dive)
+      parkerProbe.position.x = Math.cos(time * 0.25) * 8.8;
+      parkerProbe.position.z = Math.sin(time * 0.25) * 8.8;
+      parkerProbe.position.y = Math.sin(time * 0.12) * 0.8; // Inclined orbital plane
+      parkerProbe.lookAt(new THREE.Vector3(0, 0, 0)); // Point white heat shield towards Sun
+
+      // Mercury: MESSENGER Probe Orbit
+      messengerProbe.position.x = mercury.position.x + Math.cos(time * 0.6) * 0.92;
+      messengerProbe.position.z = mercury.position.z + Math.sin(time * 0.6) * 0.92;
+      messengerProbe.position.y = mercury.position.y + Math.sin(time * 0.35) * 0.18; // Highly inclined orbit
+      // Always point white sunshade towards the Sun (away from the probe bus center)
+      const sunDir = new THREE.Vector3(0, 0, 0).sub(messengerProbe.position).normalize();
+      messengerProbe.lookAt(messengerProbe.position.clone().add(sunDir));
       jupiter.rotation.y += 0.0068;
       saturnMesh.rotation.y += 0.0062;
       
