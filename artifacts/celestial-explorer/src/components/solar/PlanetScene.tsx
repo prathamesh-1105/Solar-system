@@ -432,6 +432,9 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     composer.addPass(bloomPass);
     composer.addPass(new OutputPass());
 
+    // Get max anisotropy for high-quality texture rendering
+    const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+
     // --- TEXTURE GENERATORS ---
     const createTexture = (w: number, h: number, drawFn: (ctx: CanvasRenderingContext2D) => void) => {
       const canvas = document.createElement('canvas');
@@ -440,6 +443,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       drawFn(ctx);
       const tex = new THREE.CanvasTexture(canvas);
       tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = Math.min(maxAnisotropy, 8); // Enable anisotropy for sharp graphics
       addDisposable(tex);
       return tex;
     };
@@ -460,6 +464,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     const loadTexture = (path: string) => {
       const tex = textureLoader.load(path);
       tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = Math.min(maxAnisotropy, 8); // Enable anisotropy for sharp graphics
       addDisposable(tex);
       return tex;
     };
@@ -607,11 +612,11 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     scene.add(skybox);
 
     // --- LIGHTING ENVIRONMENT ---
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.04);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.15); // Increased base light for realistic planet details
     scene.add(ambientLight);
     
     // Core Sun light source
-    const sunLight = new THREE.PointLight(0xffffff, 4.5, 1200);
+    const sunLight = new THREE.PointLight(0xffffff, 6.0, 1500, 0); // Intensity 6.0, distance 1500, decay 0 (no light falloff for crisp solar illumination)
     sunLight.position.set(0, 0, 0);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
@@ -621,7 +626,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     sunLight.shadow.camera.far = 450;
     scene.add(sunLight);
 
-    const fillLight = new THREE.DirectionalLight(0x93C5FD, 0.18);
+    const fillLight = new THREE.DirectionalLight(0xa5c4f7, 0.35); // Richer fill light for planet camera-facing side
     scene.add(fillLight);
 
     // --- PLANETS & ATMOSPHERES SETUP ---
@@ -1102,11 +1107,11 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
 
       // Update local sun positions for analytical shadows
       if (saturnMesh.material && (saturnMesh.material as THREE.ShaderMaterial).uniforms) {
-        const localSunPos = saturnMesh.worldToLocal(new THREE.Vector3(0, 0, 0));
+        const localSunPos = (saturnMesh as any).worldToLocal(new THREE.Vector3(0, 0, 0));
         (saturnMesh.material as THREE.ShaderMaterial).uniforms.uLocalSunPos.value.copy(localSunPos);
       }
       if (ringMesh.material && (ringMesh.material as THREE.ShaderMaterial).uniforms) {
-        const localSunPos = ringMesh.worldToLocal(new THREE.Vector3(0, 0, 0));
+        const localSunPos = (ringMesh as any).worldToLocal(new THREE.Vector3(0, 0, 0));
         (ringMesh.material as THREE.ShaderMaterial).uniforms.uLocalSunPos.value.copy(localSunPos);
       }
 
