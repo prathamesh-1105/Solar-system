@@ -769,6 +769,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       fragmentShader: sunShaders.fragmentShader
     }));
     const sun = new THREE.Mesh(sunGeo, sunMat);
+    sun.userData = { name: 'Sun', isHovered: false };
     scene.add(sun);
     planets['Sun'] = sun;
     interactableMeshes.push(sun);
@@ -840,7 +841,8 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       }))
     );
     mercury.position.set(0, 0, -40);
-    mercury.castShadow = true;
+    mercury.userData = { name: 'Mercury', isHovered: false };
+    mercury.castShadow = false;
     mercury.receiveShadow = true;
     scene.add(mercury);
     planets['Mercury'] = mercury;
@@ -902,7 +904,8 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       venusMat
     );
     venus.position.set(0, 0, -80);
-    venus.castShadow = true;
+    venus.userData = { name: 'Venus', isHovered: false };
+    venus.castShadow = false;
     venus.receiveShadow = true;
     scene.add(venus);
     planets['Venus'] = venus;
@@ -972,7 +975,8 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     }));
     const earth = new THREE.Mesh(earthGeo, earthMat);
     earth.position.set(0, 0, -120);
-    earth.castShadow = true;
+    earth.userData = { name: 'Earth', isHovered: false };
+    earth.castShadow = false;
     earth.receiveShadow = true;
     scene.add(earth);
     planets['Earth'] = earth;
@@ -1052,7 +1056,8 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       }))
     );
     mars.position.set(0, 0, -160);
-    mars.castShadow = true;
+    mars.userData = { name: 'Mars', isHovered: false };
+    mars.castShadow = false;
     mars.receiveShadow = true;
     scene.add(mars);
     planets['Mars'] = mars;
@@ -1189,7 +1194,8 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     }));
     const jupiter = new THREE.Mesh(jupGeo, jupMat);
     jupiter.position.set(0, 0, -220);
-    jupiter.castShadow = true;
+    jupiter.userData = { name: 'Jupiter', isHovered: false };
+    jupiter.castShadow = false;
     jupiter.receiveShadow = true;
     scene.add(jupiter);
     planets['Jupiter'] = jupiter;
@@ -1349,6 +1355,58 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       createAtmosphereMaterial(new THREE.Color('#E8D49A'), 0.3, 2.0)
     );
     saturnMesh.add(sAtmos);
+
+    // Titan (Orange thick atmosphere moon)
+    const titan = new THREE.Mesh(
+      addDisposable(new THREE.SphereGeometry(0.065, 24, 24)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0xd1a156, // Golden orange albedo
+        roughness: 0.95,
+        metalness: 0.0
+      }))
+    );
+    titan.castShadow = false;
+    titan.receiveShadow = true;
+    saturnGroup.add(titan);
+
+    // Enceladus (Highly reflective icy white moon)
+    const enceladus = new THREE.Mesh(
+      addDisposable(new THREE.SphereGeometry(0.015, 16, 16)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.35,
+        metalness: 0.1
+      }))
+    );
+    enceladus.castShadow = false;
+    enceladus.receiveShadow = true;
+    saturnGroup.add(enceladus);
+
+    // NASA's Cassini spacecraft
+    const cassiniProbe = new THREE.Group();
+    const cassiniBody = new THREE.Mesh(
+      addDisposable(new THREE.CylinderGeometry(0.015, 0.015, 0.03, 8)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0xd4af37, // Gold foil bus
+        metalness: 0.8,
+        roughness: 0.2
+      }))
+    );
+    cassiniBody.rotation.x = Math.PI / 2;
+    cassiniProbe.add(cassiniBody);
+
+    const cassiniDish = new THREE.Mesh(
+      addDisposable(new THREE.ConeGeometry(0.02, 0.01, 16)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0xffffff, // White high-gain antenna dish
+        roughness: 0.6,
+        metalness: 0.1
+      }))
+    );
+    cassiniDish.rotation.x = -Math.PI / 2;
+    cassiniDish.position.z = 0.018;
+    cassiniProbe.add(cassiniDish);
+    saturnGroup.add(cassiniProbe);
  
     // 9. URANUS
     const uranusGroup = new THREE.Group();
@@ -1364,7 +1422,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       }))
     );
     uranusMesh.userData = { name: 'Uranus', isHovered: false };
-    uranusMesh.castShadow = true;
+    uranusMesh.castShadow = false;
     uranusMesh.receiveShadow = true;
     uranusGroup.add(uranusMesh);
  
@@ -1392,9 +1450,41 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       createAtmosphereMaterial(new THREE.Color('#93E3E3'), 0.42, 2.0)
     );
     uranusMesh.add(uAtmos);
+
+    // Titania (Grey cratered moon)
+    const titania = new THREE.Mesh(
+      addDisposable(new THREE.SphereGeometry(0.025, 16, 16)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0xa0a0a0,
+        roughness: 0.9,
+        metalness: 0.1
+      }))
+    );
+    titania.castShadow = false;
+    titania.receiveShadow = true;
+    uranusGroup.add(titania);
+
+    // NASA's Voyager 2 spacecraft (Uranus flyby)
+    const voyager2Uranus = new THREE.Group();
+    const voyagerBody = new THREE.Mesh(
+      addDisposable(new THREE.BoxGeometry(0.015, 0.015, 0.015)),
+      addDisposable(new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.2 }))
+    );
+    voyager2Uranus.add(voyagerBody);
+
+    const voyagerDish = new THREE.Mesh(
+      addDisposable(new THREE.ConeGeometry(0.02, 0.008, 12)),
+      addDisposable(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.1 }))
+    );
+    voyagerDish.rotation.x = Math.PI / 2;
+    voyagerDish.position.z = 0.01;
+    voyager2Uranus.add(voyagerDish);
+    uranusGroup.add(voyager2Uranus);
  
     // 10. NEPTUNE
-    const neptune = new THREE.Mesh(
+    const neptuneGroup = new THREE.Group();
+    neptuneGroup.position.set(0, 0, -430);
+    const neptuneMesh = new THREE.Mesh(
       addDisposable(new THREE.SphereGeometry(1.9, 48, 48)),
       addDisposable(new THREE.MeshStandardMaterial({
         map: texNeptune,
@@ -1404,19 +1494,50 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
         metalness: 0.05
       }))
     );
-    neptune.position.set(0, 0, -430);
-    neptune.castShadow = true;
-    neptune.receiveShadow = true;
-    scene.add(neptune);
-    planets['Neptune'] = neptune;
-    interactableMeshes.push(neptune);
+    neptuneMesh.userData = { name: 'Neptune', isHovered: false };
+    neptuneMesh.castShadow = false;
+    neptuneMesh.receiveShadow = true;
+    neptuneGroup.add(neptuneMesh);
+    scene.add(neptuneGroup);
+    planets['Neptune'] = neptuneGroup;
+    interactableMeshes.push(neptuneMesh);
  
     // Neptune atmosphere shell
     const nAtmos = new THREE.Mesh(
       addDisposable(new THREE.SphereGeometry(2.02, 48, 48)),
       createAtmosphereMaterial(new THREE.Color('#3B82F6'), 0.5, 2.0)
     );
-    neptune.add(nAtmos);
+    neptuneMesh.add(nAtmos);
+
+    // Triton moon (retrograde orbit!)
+    const triton = new THREE.Mesh(
+      addDisposable(new THREE.SphereGeometry(0.038, 20, 20)),
+      addDisposable(new THREE.MeshStandardMaterial({
+        color: 0xd9d5c5, // Pale pinkish-grey/yellow albedo
+        roughness: 0.8,
+        metalness: 0.1
+      }))
+    );
+    triton.castShadow = false;
+    triton.receiveShadow = true;
+    neptuneGroup.add(triton);
+
+    // NASA's Voyager 2 spacecraft (Neptune flyby)
+    const voyager2Neptune = new THREE.Group();
+    const voyager2NeptuneBody = new THREE.Mesh(
+      addDisposable(new THREE.BoxGeometry(0.015, 0.015, 0.015)),
+      addDisposable(new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.2 }))
+    );
+    voyager2Neptune.add(voyager2NeptuneBody);
+
+    const voyager2NeptuneDish = new THREE.Mesh(
+      addDisposable(new THREE.ConeGeometry(0.02, 0.008, 12)),
+      addDisposable(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.1 }))
+    );
+    voyager2NeptuneDish.rotation.x = Math.PI / 2;
+    voyager2NeptuneDish.position.z = 0.01;
+    voyager2Neptune.add(voyager2NeptuneDish);
+    neptuneGroup.add(voyager2Neptune);
 
     // --- COMET ---
     const cometGroup = new THREE.Group();
@@ -1642,11 +1763,53 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
 
       jupiter.rotation.y += 0.0068;
       saturnMesh.rotation.y += 0.0062;
+
+      // Saturn: Titan Orbit
+      titan.position.x = Math.cos(time * 0.08) * 7.5;
+      titan.position.z = Math.sin(time * 0.08) * 7.5;
+      titan.rotation.y += 0.005;
+
+      // Saturn: Enceladus Orbit (inside/near rings)
+      enceladus.position.x = Math.cos(time * 0.18 + 2.0) * 3.3;
+      enceladus.position.z = Math.sin(time * 0.18 + 2.0) * 3.3;
+      enceladus.rotation.y += 0.01;
+
+      // Saturn: Cassini Probe Orbit
+      const cassiniAngle = time * 0.12;
+      cassiniProbe.position.x = Math.cos(cassiniAngle) * 7.0;
+      cassiniProbe.position.z = Math.sin(cassiniAngle) * 7.0;
+      cassiniProbe.position.y = Math.sin(cassiniAngle) * 0.5; // Inclination
+      cassiniProbe.lookAt(new THREE.Vector3(0, 0, 0)); // Point antenna dish at Saturn
       
-      const uMesh = planets['Uranus']?.children[0];
-      if (uMesh) uMesh.rotation.y -= 0.0039; // side retrograde
+      // Uranus rotation (side retrograde)
+      uranusMesh.rotation.y -= 0.0039;
+
+      // Uranus: Titania Orbit
+      titania.position.x = Math.cos(time * 0.15) * 3.8;
+      titania.position.z = Math.sin(time * 0.15) * 3.8;
+      titania.rotation.y += 0.005;
+
+      // Uranus: Voyager 2 Flyby
+      const v2TimeU = (time * 0.06) % 6.0;
+      voyager2Uranus.position.x = -5.0 + v2TimeU * 2.0;
+      voyager2Uranus.position.z = 3.0 - v2TimeU * 1.5;
+      voyager2Uranus.position.y = -0.8 + v2TimeU * 0.4;
+      voyager2Uranus.lookAt(new THREE.Vector3(0, 0, 0)); // Point towards Uranus center
       
-      neptune.rotation.y += 0.0042;
+      // Neptune rotation
+      neptuneMesh.rotation.y += 0.0042;
+
+      // Neptune: Triton Orbit (retrograde: negative speed multiplier)
+      triton.position.x = Math.cos(-time * 0.11) * 3.2;
+      triton.position.z = Math.sin(-time * 0.11) * 3.2;
+      triton.rotation.y += 0.004;
+
+      // Neptune: Voyager 2 Flyby (past Neptune)
+      const v2TimeN = (time * 0.05) % 6.0;
+      voyager2Neptune.position.x = -4.5 + v2TimeN * 1.8;
+      voyager2Neptune.position.z = 2.5 - v2TimeN * 1.3;
+      voyager2Neptune.position.y = -0.6 + v2TimeN * 0.35;
+      voyager2Neptune.lookAt(new THREE.Vector3(0, 0, 0)); // Point towards Neptune center
 
       // Space dust tracking
       const dustPosAttr = dustGeo.attributes.position as THREE.BufferAttribute;
