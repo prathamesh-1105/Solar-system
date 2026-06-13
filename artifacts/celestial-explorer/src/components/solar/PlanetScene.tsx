@@ -717,14 +717,19 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     }
 
     // --- LENIS SETUP ---
-    const lenis = new Lenis({
-      duration: 1.5,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), // Exponential deceleration ease
-      smoothWheel: true,
-      syncTouch: true,
-    });
-
-    lenis.on('scroll', ScrollTrigger.update);
+    // --- LENIS SETUP ---
+    // Completely disable Lenis on mobile touch devices. Mobile platforms have native, highly optimized momentum scroll.
+    // Hijacking touch scroll with Lenis syncTouch: true forces scrolling onto the main CPU thread, causing severe lag when WebGL is active.
+    let lenis: Lenis | null = null;
+    if (!isMobile) {
+      lenis = new Lenis({
+        duration: 1.5,
+        easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), // Exponential deceleration ease
+        smoothWheel: true,
+        syncTouch: false, // Do not smooth touch scrolling on desktop either to prevent browser conflicts
+      });
+      lenis.on('scroll', ScrollTrigger.update);
+    }
 
     // --- THREEJS SETUP ---
     const scene = new THREE.Scene();
@@ -740,7 +745,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       });
     } catch {
       setWebglError(true);
-      lenis.destroy();
+      if (lenis) lenis.destroy();
       return;
     }
 
@@ -820,60 +825,10 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     const texMercury = loadTexture('/2k_mercury.jpg');
     const texVenus = loadTexture('/2k_venus.jpg');
     const texEarth = loadTexture('/2k_earth_daymap.jpg');
-    const texEarthCityLights = loadTexture('/2k_earth_night.jpg');
+    const texEarthCityLights = isMobile ? null : loadTexture('/2k_earth_night.jpg');
     const texEarthTopology = loadTexture('/2k_earth_topology.png');
-    const texEarthWater = loadTexture('/2k_earth_water.png');
-
-    const texEarthClouds = createTexture(1024, 512, ctx => {
-      ctx.clearRect(0, 0, 1024, 512);
-      const imgData = ctx.createImageData(1024, 512);
-      const data = imgData.data;
-      
-      // Fine-grained multi-octave noise generator for wispy organic clouds
-      const noise = (x: number, y: number) => {
-        let val = 0;
-        let scale = 1.0;
-        let weight = 1.0;
-        let totalWeight = 0;
-        for (let o = 0; o < 5; o++) {
-          const nx = x * 0.015 * scale;
-          const ny = y * 0.015 * scale;
-          const n = (Math.sin(nx * 2.3 + Math.cos(ny * 1.8)) + 
-                     Math.sin(nx * 1.2 - ny * 2.8) + 
-                     Math.cos(nx * 1.9 + ny * 1.5)) / 3.0;
-          val += (n * 0.5 + 0.5) * weight;
-          totalWeight += weight;
-          scale *= 2.2;
-          weight *= 0.45;
-        }
-        return val / totalWeight;
-      };
-
-      for (let y = 0; y < 512; y++) {
-        for (let x = 0; x < 1024; x++) {
-          const idx = (y * 1024 + x) * 4;
-          const lat = (y / 512.0) * Math.PI;
-          const latScale = Math.sin(lat); // 0 at poles, 1 at equator
-          
-          // Organic weather bands (clouds concentrate around temperate and equatorial zones)
-          const tempBands = 0.3 + 0.7 * Math.pow(Math.sin(lat * 3.0), 2.0);
-          const bandFactor = Math.pow(latScale, 2.0) * tempBands;
-          
-          // Micro-swirl and atmospheric wind shear
-          const swirl = Math.sin(x * 0.04 + y * 0.03) * 12.0;
-          const nVal = noise(x + swirl, y + Math.cos(x * 0.02) * 15.0);
-          
-          // Soft alpha transition (no hard blocky edges)
-          const alpha = Math.max(0.0, nVal - 0.38) * 0.85 * bandFactor;
-          
-          data[idx] = 255;
-          data[idx + 1] = 255;
-          data[idx + 2] = 255;
-          data[idx + 3] = Math.min(220, Math.floor(alpha * 255));
-        }
-      }
-      ctx.putImageData(imgData, 0, 0);
-    });
+    const texEarthWater = isMobile ? null : loadTexture('/2k_earth_water.png');
+    // Unused texEarthClouds generator removed to save huge startup CPU overhead
 
     const texMars = loadTexture('/2k_mars.jpg');
     const texSaturn = loadTexture('/2k_saturn.jpg');
@@ -932,7 +887,25 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
-      fragmentShader: `
+      fragmentShader: isMobile ? `
+        varying vec3 vWorldPosition;
+        uniform float time;
+        float hash(float n) { return fract(sin(n) * 43758.5453123); }
+        void main() {
+          vec3 dir = normalize(vWorldPosition);
+          float stars = 0.0;
+          float starHash = hash(dir.x * 123.45 + dir.y * 345.67 + dir.z * 567.89);
+          if (starHash > 0.993) {
+            float brightness = hash(starHash * 23.45) * (0.5 + 0.5 * sin(time * 1.5 + starHash * 10.0));
+            stars = brightness;
+          }
+          float fineStarHash = hash(dir.x * 234.56 + dir.y * 456.78 + dir.z * 678.90);
+          if (fineStarHash > 0.997) {
+            stars += hash(fineStarHash * 45.67) * 0.45;
+          }
+          gl_FragColor = vec4(vec3(stars * 0.72), 1.0);
+        }
+      ` : `
         varying vec3 vWorldPosition;
         uniform float time;
         ${noiseGLSL}
@@ -1042,27 +1015,30 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
 
     // 1. SUN
     const sunGeo = addDisposable(new MobileSphereGeometry(6, 64, 64));
-    const sunMat = addDisposable(new THREE.ShaderMaterial({
-      uniforms: {
-        time: { value: 0 },
-        uTexture: { value: texSun }
-      },
-      vertexShader: sunShaders.vertexShader,
-      fragmentShader: sunShaders.fragmentShader
-    }));
+    const sunMat = isMobile
+      ? addDisposable(new THREE.MeshBasicMaterial({ map: texSun }))
+      : addDisposable(new THREE.ShaderMaterial({
+          uniforms: {
+            time: { value: 0 },
+            uTexture: { value: texSun }
+          },
+          vertexShader: sunShaders.vertexShader,
+          fragmentShader: sunShaders.fragmentShader
+        }));
     const sun = new THREE.Mesh(sunGeo, sunMat);
     sun.userData = { name: 'Sun', isHovered: false };
     scene.add(sun);
     planets['Sun'] = sun;
     interactableMeshes.push(sun);
  
-    // Sun Volumetric Corona Glow
-    [15, 22, 34, 52].forEach((size, i) => {
+    // Sun Volumetric Corona Glow (Reduced to a single sprite on mobile to save draw calls)
+    const sunGlowSizes = isMobile ? [22] : [15, 22, 34, 52];
+    sunGlowSizes.forEach((size, i) => {
       const glowMat = addDisposable(new THREE.SpriteMaterial({
         map: texGlow,
         color: 0xFF5500,
         transparent: true,
-        opacity: [0.36, 0.18, 0.08, 0.04][i],
+        opacity: isMobile ? 0.38 : [0.36, 0.18, 0.08, 0.04][i],
         blending: THREE.AdditiveBlending
       }));
       const sprite = new THREE.Sprite(glowMat);
@@ -1070,46 +1046,49 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       sun.add(sprite);
     });
 
-    // NASA's Parker Solar Probe orbiting the Sun (dives through outer corona)
-    const parkerProbe = new THREE.Group();
-    const probeBody = new THREE.Mesh(
-      addDisposable(new THREE.BoxGeometry(0.05, 0.05, 0.05)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0xd4af37, // Gold foil bus
-        metalness: 0.85,
-        roughness: 0.15
-      }))
-    );
-    parkerProbe.add(probeBody);
+    // NASA's Parker Solar Probe orbiting the Sun (dives through outer corona) - Disabled on mobile to save draw calls
+    let parkerProbe: THREE.Group | null = null;
+    if (!isMobile) {
+      parkerProbe = new THREE.Group();
+      const probeBody = new THREE.Mesh(
+        addDisposable(new THREE.BoxGeometry(0.05, 0.05, 0.05)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0xd4af37, // Gold foil bus
+          metalness: 0.85,
+          roughness: 0.15
+        }))
+      );
+      parkerProbe.add(probeBody);
 
-    const heatShield = new THREE.Mesh(
-      addDisposable(new THREE.CylinderGeometry(0.08, 0.08, 0.015, 8)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0xfafafa, // White alumina heat shield
-        roughness: 0.6,
-        metalness: 0.1
-      }))
-    );
-    heatShield.rotation.x = Math.PI / 2;
-    heatShield.position.z = 0.03; // Face the Sun
-    parkerProbe.add(heatShield);
+      const heatShield = new THREE.Mesh(
+        addDisposable(new THREE.CylinderGeometry(0.08, 0.08, 0.015, 8)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0xfafafa, // White alumina heat shield
+          roughness: 0.6,
+          metalness: 0.1
+        }))
+      );
+      heatShield.rotation.x = Math.PI / 2;
+      heatShield.position.z = 0.03; // Face the Sun
+      parkerProbe.add(heatShield);
 
-    const panelLeft = new THREE.Mesh(
-      addDisposable(new THREE.BoxGeometry(0.12, 0.025, 0.004)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0x1a365d, // Blue-grey solar array
-        metalness: 0.5,
-        roughness: 0.2
-      }))
-    );
-    panelLeft.position.set(-0.08, 0, 0);
-    parkerProbe.add(panelLeft);
+      const panelLeft = new THREE.Mesh(
+        addDisposable(new THREE.BoxGeometry(0.12, 0.025, 0.004)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0x1a365d, // Blue-grey solar array
+          metalness: 0.5,
+          roughness: 0.2
+        }))
+      );
+      panelLeft.position.set(-0.08, 0, 0);
+      parkerProbe.add(panelLeft);
 
-    const panelRight = panelLeft.clone();
-    panelRight.position.set(0.08, 0, 0);
-    parkerProbe.add(panelRight);
+      const panelRight = panelLeft.clone();
+      panelRight.position.set(0.08, 0, 0);
+      parkerProbe.add(panelRight);
 
-    scene.add(parkerProbe);
+      scene.add(parkerProbe);
+    }
  
     // 2. MERCURY (Low segment far, high near - lod balance)
     const mercury = new THREE.Mesh(
@@ -1130,57 +1109,62 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     planets['Mercury'] = mercury;
     interactableMeshes.push(mercury);
 
-    // NASA's MESSENGER spacecraft orbiting Mercury
-    const messengerProbe = new THREE.Group();
-    const messengerBody = new THREE.Mesh(
-      addDisposable(new THREE.BoxGeometry(0.03, 0.03, 0.03)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0xa8a8a8, // Silver bus
-        metalness: 0.85,
-        roughness: 0.15
-      }))
-    );
-    messengerProbe.add(messengerBody);
+    // NASA's MESSENGER spacecraft orbiting Mercury - Disabled on mobile
+    let messengerProbe: THREE.Group | null = null;
+    if (!isMobile) {
+      messengerProbe = new THREE.Group();
+      const messengerBody = new THREE.Mesh(
+        addDisposable(new THREE.BoxGeometry(0.03, 0.03, 0.03)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0xa8a8a8, // Silver bus
+          metalness: 0.85,
+          roughness: 0.15
+        }))
+      );
+      messengerProbe.add(messengerBody);
 
-    const sunshade = new THREE.Mesh(
-      addDisposable(new THREE.CylinderGeometry(0.045, 0.045, 0.005, 12, 1, true, 0, Math.PI)), // Curved sunshield
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0xeaeaea,
-        side: THREE.DoubleSide,
-        roughness: 0.6
-      }))
-    );
-    sunshade.position.z = 0.018;
-    sunshade.rotation.y = Math.PI / 2;
-    messengerProbe.add(sunshade);
+      const sunshade = new THREE.Mesh(
+        addDisposable(new THREE.CylinderGeometry(0.045, 0.045, 0.005, 12, 1, true, 0, Math.PI)), // Curved sunshield
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0xeaeaea,
+          side: THREE.DoubleSide,
+          roughness: 0.6
+        }))
+      );
+      sunshade.position.z = 0.018;
+      sunshade.rotation.y = Math.PI / 2;
+      messengerProbe.add(sunshade);
 
-    const mPanelLeft = new THREE.Mesh(
-      addDisposable(new THREE.BoxGeometry(0.07, 0.02, 0.003)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0x1a365d,
-        metalness: 0.5,
-        roughness: 0.3
-      }))
-    );
-    mPanelLeft.position.set(-0.05, 0, 0);
-    messengerProbe.add(mPanelLeft);
+      const mPanelLeft = new THREE.Mesh(
+        addDisposable(new THREE.BoxGeometry(0.07, 0.02, 0.003)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0x1a365d,
+          metalness: 0.5,
+          roughness: 0.3
+        }))
+      );
+      mPanelLeft.position.set(-0.05, 0, 0);
+      messengerProbe.add(mPanelLeft);
 
-    const mPanelRight = mPanelLeft.clone();
-    mPanelRight.position.set(0.05, 0, 0);
-    messengerProbe.add(mPanelRight);
+      const mPanelRight = mPanelLeft.clone();
+      mPanelRight.position.set(0.05, 0, 0);
+      messengerProbe.add(mPanelRight);
 
-    scene.add(messengerProbe);
+      scene.add(messengerProbe);
+    }
  
     // 3. VENUS (Custom volumetric shader simulating hot dense atmosphere & cloud super-rotation)
-    const venusMat = addDisposable(new THREE.ShaderMaterial({
-      uniforms: {
-        time: { value: 0 },
-        uSunPosition: { value: new THREE.Vector3(0, 0, 0) },
-        uTexture: { value: texVenus }
-      },
-      vertexShader: venusShaders.vertexShader,
-      fragmentShader: venusShaders.fragmentShader
-    }));
+    const venusMat = isMobile
+      ? addDisposable(new THREE.MeshStandardMaterial({ map: texVenus, roughness: 0.9, metalness: 0.1 }))
+      : addDisposable(new THREE.ShaderMaterial({
+          uniforms: {
+            time: { value: 0 },
+            uSunPosition: { value: new THREE.Vector3(0, 0, 0) },
+            uTexture: { value: texVenus }
+          },
+          vertexShader: venusShaders.vertexShader,
+          fragmentShader: venusShaders.fragmentShader
+        }));
     const venus = new THREE.Mesh(
       addDisposable(new MobileSphereGeometry(1.2, 48, 48)),
       venusMat
@@ -1193,68 +1177,81 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     planets['Venus'] = venus;
     interactableMeshes.push(venus);
  
-    // Venus atmosphere shell
-    const vAtmos = new THREE.Mesh(
-      addDisposable(new MobileSphereGeometry(1.26, 48, 48)),
-      createAtmosphereMaterial(new THREE.Color('#E8C66A'), 0.45, 2.0)
-    );
-    venus.add(vAtmos);
+    // Venus atmosphere shell - Disabled on mobile to save draw calls & transparency overdraw
+    if (!isMobile) {
+      const vAtmos = new THREE.Mesh(
+        addDisposable(new MobileSphereGeometry(1.26, 48, 48)),
+        createAtmosphereMaterial(new THREE.Color('#E8C66A'), 0.45, 2.0)
+      );
+      venus.add(vAtmos);
+    }
 
-    // NASA's Magellan spacecraft orbiting Venus
-    const magellanProbe = new THREE.Group();
-    const magellanBody = new THREE.Mesh(
-      addDisposable(new THREE.BoxGeometry(0.04, 0.04, 0.04)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0xd4af37, // Gold foil bus
-        metalness: 0.8,
-        roughness: 0.2
-      }))
-    );
-    magellanProbe.add(magellanBody);
+    // NASA's Magellan spacecraft orbiting Venus - Disabled on mobile
+    let magellanProbe: THREE.Group | null = null;
+    if (!isMobile) {
+      magellanProbe = new THREE.Group();
+      const magellanBody = new THREE.Mesh(
+        addDisposable(new THREE.BoxGeometry(0.04, 0.04, 0.04)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0xd4af37, // Gold foil bus
+          metalness: 0.8,
+          roughness: 0.2
+        }))
+      );
+      magellanProbe.add(magellanBody);
 
-    const radarDish = new THREE.Mesh(
-      addDisposable(new THREE.ConeGeometry(0.065, 0.025, 16)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0xdddddd, // Light grey radar dish
-        roughness: 0.5,
-        metalness: 0.1
-      }))
-    );
-    radarDish.rotation.x = -Math.PI / 2; // Face towards Venus
-    radarDish.position.z = 0.03;
-    magellanProbe.add(radarDish);
+      const radarDish = new THREE.Mesh(
+        addDisposable(new THREE.ConeGeometry(0.065, 0.025, 16)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0xdddddd, // Light grey radar dish
+          roughness: 0.5,
+          metalness: 0.1
+        }))
+      );
+      radarDish.rotation.x = -Math.PI / 2; // Face towards Venus
+      radarDish.position.z = 0.03;
+      magellanProbe.add(radarDish);
 
-    const magellanPanelLeft = new THREE.Mesh(
-      addDisposable(new THREE.BoxGeometry(0.09, 0.03, 0.003)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0x1a365d, // Blue solar panels
-        metalness: 0.5,
-        roughness: 0.3
-      }))
-    );
-    magellanPanelLeft.position.set(-0.07, 0, 0);
-    magellanProbe.add(magellanPanelLeft);
+      const magellanPanelLeft = new THREE.Mesh(
+        addDisposable(new THREE.BoxGeometry(0.09, 0.03, 0.003)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0x1a365d, // Blue solar panels
+          metalness: 0.5,
+          roughness: 0.3
+        }))
+      );
+      magellanPanelLeft.position.set(-0.07, 0, 0);
+      magellanProbe.add(magellanPanelLeft);
 
-    const magellanPanelRight = magellanPanelLeft.clone();
-    magellanPanelRight.position.set(0.07, 0, 0);
-    magellanProbe.add(magellanPanelRight);
+      const magellanPanelRight = magellanPanelLeft.clone();
+      magellanPanelRight.position.set(0.07, 0, 0);
+      magellanProbe.add(magellanPanelRight);
 
-    scene.add(magellanProbe);
+      scene.add(magellanProbe);
+    }
  
     // 4. EARTH (PBR + custom shader for day/night city lights, elevation bump, water specular, and cloud shadows)
     const earthGeo = addDisposable(new MobileSphereGeometry(1.3, 48, 48));
-    const earthMat = addDisposable(new THREE.ShaderMaterial({
-      uniforms: {
-        tDiffuse: { value: texEarth },
-        tCityLights: { value: texEarthCityLights },
-        tWater: { value: texEarthWater },
-        tTopology: { value: texEarthTopology },
-        uSunPosition: { value: new THREE.Vector3(0, 0, 0) },
-        time: { value: 0 }
-      },
-      vertexShader: earthShaders.vertexShader,
-      fragmentShader: earthShaders.fragmentShader
-    }));
+    const earthMat = isMobile
+      ? addDisposable(new THREE.MeshStandardMaterial({
+          map: texEarth,
+          bumpMap: texEarthTopology,
+          bumpScale: 0.012,
+          roughness: 0.45,
+          metalness: 0.15
+        }))
+      : addDisposable(new THREE.ShaderMaterial({
+          uniforms: {
+            tDiffuse: { value: texEarth },
+            tCityLights: { value: texEarthCityLights },
+            tWater: { value: texEarthWater },
+            tTopology: { value: texEarthTopology },
+            uSunPosition: { value: new THREE.Vector3(0, 0, 0) },
+            time: { value: 0 }
+          },
+          vertexShader: earthShaders.vertexShader,
+          fragmentShader: earthShaders.fragmentShader
+        }));
     const earth = new THREE.Mesh(earthGeo, earthMat);
     earth.position.set(0, 0, -120);
     earth.userData = { name: 'Earth', isHovered: false };
@@ -1264,30 +1261,14 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     planets['Earth'] = earth;
     interactableMeshes.push(earth);
  
-    // Earth blue atmosphere (thin, crisp halo)
-    const eAtmos = new THREE.Mesh(
-      addDisposable(new MobileSphereGeometry(1.315, 48, 48)), // Tighten to match cloud layer exactly
-      createAtmosphereMaterial(new THREE.Color('#2b80ff'), 0.28, 3.2) // Softer, more integrated blue edge glow
-    );
-    earth.add(eAtmos);
-
-    // Separate Earth clouds layer (REMOVED as requested by user to keep continents clean)
-    /*
-    const cloudGeo = addDisposable(new MobileSphereGeometry(1.312, 48, 48)); // Just inside atmosphere
-    const cloudMat = addDisposable(new THREE.MeshStandardMaterial({
-      alphaMap: texEarthClouds,
-      transparent: true,
-      opacity: 0.26, // Much softer, semi-transparent clouds to reveal continents clearly
-      color: 0xcccccc, // Darker albedo prevents blowing out in the sun
-      roughness: 0.98, // Completely rough for realistic diffuse reflection
-      metalness: 0.0,
-      blending: THREE.NormalBlending,
-      depthWrite: false
-    }));
-    const earthClouds = new THREE.Mesh(cloudGeo, cloudMat);
-    earthClouds.castShadow = true;
-    earth.add(earthClouds);
-    */
+    // Earth blue atmosphere (thin, crisp halo) - Disabled on mobile
+    if (!isMobile) {
+      const eAtmos = new THREE.Mesh(
+        addDisposable(new MobileSphereGeometry(1.315, 48, 48)), // Tighten to match cloud layer exactly
+        createAtmosphereMaterial(new THREE.Color('#2b80ff'), 0.28, 3.2) // Softer, more integrated blue edge glow
+      );
+      earth.add(eAtmos);
+    }
 
     // The Moon (Luna) orbiting Earth
     const moon = new THREE.Mesh(
@@ -1304,27 +1285,30 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     moon.receiveShadow = true;
     scene.add(moon);
 
-    // International Space Station (ISS) orbiting Earth
-    const iss = new THREE.Group();
-    const issBody = new THREE.Mesh(
-      addDisposable(new THREE.CylinderGeometry(0.008, 0.008, 0.07, 8)), // Main truss structure
-      addDisposable(new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.6, roughness: 0.3 }))
-    );
-    issBody.rotation.z = Math.PI / 2;
-    iss.add(issBody);
+    // International Space Station (ISS) orbiting Earth - Disabled on mobile
+    let iss: THREE.Group | null = null;
+    if (!isMobile) {
+      iss = new THREE.Group();
+      const issBody = new THREE.Mesh(
+        addDisposable(new THREE.CylinderGeometry(0.008, 0.008, 0.07, 8)), // Main truss structure
+        addDisposable(new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.6, roughness: 0.3 }))
+      );
+      issBody.rotation.z = Math.PI / 2;
+      iss.add(issBody);
 
-    const arrayGeo = addDisposable(new THREE.BoxGeometry(0.02, 0.045, 0.002));
-    const arrayMat = addDisposable(new THREE.MeshStandardMaterial({ color: 0xb58a3e, metalness: 0.5, roughness: 0.4 })); // Goldish solar panels
-    for (let i = 0; i < 4; i++) {
-      const panel1 = new THREE.Mesh(arrayGeo, arrayMat);
-      const panel2 = panel1.clone();
-      const posX = -0.025 + (i * 0.016);
-      panel1.position.set(posX, 0.025, 0);
-      panel2.position.set(posX, -0.025, 0);
-      iss.add(panel1);
-      iss.add(panel2);
+      const arrayGeo = addDisposable(new THREE.BoxGeometry(0.02, 0.045, 0.002));
+      const arrayMat = addDisposable(new THREE.MeshStandardMaterial({ color: 0xb58a3e, metalness: 0.5, roughness: 0.4 })); // Goldish solar panels
+      for (let i = 0; i < 4; i++) {
+        const panel1 = new THREE.Mesh(arrayGeo, arrayMat);
+        const panel2 = panel1.clone();
+        const posX = -0.025 + (i * 0.016);
+        panel1.position.set(posX, 0.025, 0);
+        panel2.position.set(posX, -0.025, 0);
+        iss.add(panel1);
+        iss.add(panel2);
+      }
+      scene.add(iss);
     }
-    scene.add(iss);
  
     // 5. MARS
     const mars = new THREE.Mesh(
@@ -1345,102 +1329,115 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     planets['Mars'] = mars;
     interactableMeshes.push(mars);
  
-    // Mars atmosphere shell (thin dust layer - tightened for scientific accuracy)
-    const mAtmos = new THREE.Mesh(
-      addDisposable(new MobileSphereGeometry(0.718, 48, 48)), // Tighter thin atmosphere
-      createAtmosphereMaterial(new THREE.Color('#e05934'), 0.35, 3.5)
-    );
-    mars.add(mAtmos);
+    // Mars atmosphere shell (thin dust layer) - Disabled on mobile
+    if (!isMobile) {
+      const mAtmos = new THREE.Mesh(
+        addDisposable(new MobileSphereGeometry(0.718, 48, 48)), // Tighter thin atmosphere
+        createAtmosphereMaterial(new THREE.Color('#e05934'), 0.35, 3.5)
+      );
+      mars.add(mAtmos);
+    }
 
-    // Mars Moons: Phobos and Deimos
-    const phobos = new THREE.Mesh(
-      addDisposable(new THREE.DodecahedronGeometry(0.024, 0)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0x857d77,
-        roughness: 0.95,
-        metalness: 0.05
-      }))
-    );
-    phobos.castShadow = true;
-    phobos.receiveShadow = true;
-    mars.add(phobos);
+    // Mars Moons: Phobos and Deimos - Disabled on mobile
+    let phobos: THREE.Mesh | null = null;
+    let deimos: THREE.Mesh | null = null;
+    if (!isMobile) {
+      phobos = new THREE.Mesh(
+        addDisposable(new THREE.DodecahedronGeometry(0.024, 0)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0x857d77,
+          roughness: 0.95,
+          metalness: 0.05
+        }))
+      );
+      phobos.castShadow = true;
+      phobos.receiveShadow = true;
+      mars.add(phobos);
 
-    const deimos = new THREE.Mesh(
-      addDisposable(new THREE.DodecahedronGeometry(0.015, 0)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0x7a7470,
-        roughness: 0.95,
-        metalness: 0.05
-      }))
-    );
-    deimos.castShadow = true;
-    deimos.receiveShadow = true;
-    mars.add(deimos);
+      deimos = new THREE.Mesh(
+        addDisposable(new THREE.DodecahedronGeometry(0.015, 0)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0x7a7470,
+          roughness: 0.95,
+          metalness: 0.05
+        }))
+      );
+      deimos.castShadow = true;
+      deimos.receiveShadow = true;
+      mars.add(deimos);
+    }
 
-    // NASA's Mars Reconnaissance Orbiter (MRO)
-    const mroProbe = new THREE.Group();
-    const mroBody = new THREE.Mesh(
-      addDisposable(new THREE.BoxGeometry(0.025, 0.025, 0.025)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0xd4af37, // Gold foil bus
-        metalness: 0.8,
-        roughness: 0.2
-      }))
-    );
-    mroProbe.add(mroBody);
+    // NASA's Mars Reconnaissance Orbiter (MRO) - Disabled on mobile
+    let mroProbe: THREE.Group | null = null;
+    if (!isMobile) {
+      mroProbe = new THREE.Group();
+      const mroBody = new THREE.Mesh(
+        addDisposable(new THREE.BoxGeometry(0.025, 0.025, 0.025)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0xd4af37, // Gold foil bus
+          metalness: 0.8,
+          roughness: 0.2
+        }))
+      );
+      mroProbe.add(mroBody);
 
-    const mroDish = new THREE.Mesh(
-      addDisposable(new THREE.ConeGeometry(0.03, 0.015, 12)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0xcccccc, // High-gain antenna dish
-        roughness: 0.5,
-        metalness: 0.1
-      }))
-    );
-    mroDish.rotation.x = -Math.PI / 2; // Point down at Mars for mapping/comms
-    mroDish.position.z = 0.02;
-    mroProbe.add(mroDish);
+      const mroDish = new THREE.Mesh(
+        addDisposable(new THREE.ConeGeometry(0.03, 0.015, 12)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0xcccccc, // High-gain antenna dish
+          roughness: 0.5,
+          metalness: 0.1
+        }))
+      );
+      mroDish.rotation.x = -Math.PI / 2; // Point down at Mars for mapping/comms
+      mroDish.position.z = 0.02;
+      mroProbe.add(mroDish);
 
-    const mroPanelLeft = new THREE.Mesh(
-      addDisposable(new THREE.BoxGeometry(0.065, 0.018, 0.003)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0x1a365d,
-        metalness: 0.5,
-        roughness: 0.3
-      }))
-    );
-    mroPanelLeft.position.set(-0.05, 0, 0);
-    mroProbe.add(mroPanelLeft);
+      const mroPanelLeft = new THREE.Mesh(
+        addDisposable(new THREE.BoxGeometry(0.065, 0.018, 0.003)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0x1a365d,
+          metalness: 0.5,
+          roughness: 0.3
+        }))
+      );
+      mroPanelLeft.position.set(-0.05, 0, 0);
+      mroProbe.add(mroPanelLeft);
 
-    const mroPanelRight = mroPanelLeft.clone();
-    mroPanelRight.position.set(0.05, 0, 0);
-    mroProbe.add(mroPanelRight);
+      const mroPanelRight = mroPanelLeft.clone();
+      mroPanelRight.position.set(0.05, 0, 0);
+      mroProbe.add(mroPanelRight);
 
-    scene.add(mroProbe);
+      scene.add(mroProbe);
+    }
  
     // 6. INSTANCED 3D ASTEROID BELT (Awwwards optimization - 1 draw call!)
     const asteroidCount = isMobile ? 700 : 2200;
-    // Create random displaced rock geometries (deformed non-uniformly for potato-like shapes, scaled up for high visibility)
-    const rockGeo = addDisposable(new THREE.DodecahedronGeometry(0.22, 1));
+    // Subdivided dodecahedron geometry to allow smooth organic deformations
+    const rockGeo = addDisposable(new THREE.DodecahedronGeometry(0.22, 2));
     const rockPosAttr = rockGeo.attributes.position;
     for (let i = 0; i < rockPosAttr.count; i++) {
       const x = rockPosAttr.getX(i);
       const y = rockPosAttr.getY(i);
       const z = rockPosAttr.getZ(i);
-      // Irregular rocky deformations
-      const rx = 0.75 + Math.random() * 0.5;
-      const ry = 0.75 + Math.random() * 0.5;
-      const rz = 0.75 + Math.random() * 0.5;
-      rockPosAttr.setXYZ(i, x * rx, y * ry, z * rz);
+      
+      // Radial lumpy organic perturbation using low-frequency trigonometric wave functions
+      const len = Math.sqrt(x*x + y*y + z*z);
+      if (len > 0.001) {
+        const noise = (Math.sin(x * 12.0) * Math.cos(y * 12.0) * Math.sin(z * 12.0)) * 0.045 +
+                      (Math.cos(x * 6.0) * Math.sin(y * 6.0) * Math.cos(z * 6.0)) * 0.025;
+        rockPosAttr.setXYZ(i, x + (x / len) * noise, y + (y / len) * noise, z + (z / len) * noise);
+      }
     }
     rockGeo.computeVertexNormals();
  
     const rockMat = addDisposable(new THREE.MeshStandardMaterial({
-      bumpMap: texMercury, // Use cratered Mercury texture as a high-graphics bump map
-      bumpScale: 0.05,
-      roughness: 0.8,
-      metalness: 0.1,
-      emissive: new THREE.Color(0x181512) // Subtle ambient glow so shadow-side of rocks is visible against space
+      map: texMercury, // Map the cratered rock texture to diffuse map to prevent flat shading
+      bumpMap: texMercury,
+      bumpScale: 0.075,
+      roughness: 0.9,
+      metalness: 0.02,
+      emissive: new THREE.Color(0x0e0c0a) // Extremely subtle ambient visibility against deep space
     }));
  
     const asteroidBelt = new THREE.InstancedMesh(rockGeo, rockMat, asteroidCount);
@@ -1473,8 +1470,12 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       dummy.position.set(x, y, z);
       dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
       
+      // Organic non-uniform scaling to make each rock shape unique
       const s = 0.5 + Math.random() * 1.5;
-      dummy.scale.set(s, s, s);
+      const sx = s * (0.8 + Math.random() * 0.4);
+      const sy = s * (0.8 + Math.random() * 0.4);
+      const sz = s * (0.8 + Math.random() * 0.4);
+      dummy.scale.set(sx, sy, sz);
       dummy.updateMatrix();
       asteroidBelt.setMatrixAt(i, dummy.matrix);
       
@@ -1503,15 +1504,17 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     // 7. JUPITER (swirling storms + bands)
     const texJupiter = loadTexture('/2k_jupiter.jpg');
     const jupGeo = addDisposable(new MobileSphereGeometry(3.5, 54, 54));
-    const jupMat = addDisposable(new THREE.ShaderMaterial({
-      uniforms: {
-        time: { value: 0 },
-        uSunPosition: { value: new THREE.Vector3(0, 0, 0) },
-        uTexture: { value: texJupiter }
-      },
-      vertexShader: jupiterShaders.vertexShader,
-      fragmentShader: jupiterShaders.fragmentShader
-    }));
+    const jupMat = isMobile
+      ? addDisposable(new THREE.MeshStandardMaterial({ map: texJupiter, roughness: 0.85, metalness: 0.15 }))
+      : addDisposable(new THREE.ShaderMaterial({
+          uniforms: {
+            time: { value: 0 },
+            uSunPosition: { value: new THREE.Vector3(0, 0, 0) },
+            uTexture: { value: texJupiter }
+          },
+          vertexShader: jupiterShaders.vertexShader,
+          fragmentShader: jupiterShaders.fragmentShader
+        }));
     const jupiter = new THREE.Mesh(jupGeo, jupMat);
     jupiter.position.set(0, 0, -220);
     jupiter.userData = { name: 'Jupiter', isHovered: false };
@@ -1521,100 +1524,111 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     planets['Jupiter'] = jupiter;
     interactableMeshes.push(jupiter);
  
-    // Jupiter atmosphere shell
-    const jAtmos = new THREE.Mesh(
-      addDisposable(new MobileSphereGeometry(3.7, 54, 54)),
-      createAtmosphereMaterial(new THREE.Color('#F59E0B'), 0.32, 2.2)
-    );
-    jupiter.add(jAtmos);
-
-    // Jupiter's 4 Galilean Moons: Io, Europa, Ganymede, and Callisto
-    // Io (Yellow-orange volcanic)
-    const io = new THREE.Mesh(
-      addDisposable(new MobileSphereGeometry(0.06, 24, 24)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0xe6df3c, // Sulfurous yellow-orange
-        roughness: 0.8,
-        metalness: 0.1
-      }))
-    );
-    io.castShadow = true;
-    io.receiveShadow = true;
-    scene.add(io);
-
-    // Europa (Icy white-grey)
-    const europa = new THREE.Mesh(
-      addDisposable(new MobileSphereGeometry(0.05, 24, 24)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0xd9d7cd, // Reflective ice-white
-        roughness: 0.45,
-        metalness: 0.05
-      }))
-    );
-    europa.castShadow = true;
-    europa.receiveShadow = true;
-    scene.add(europa);
-
-    // Ganymede (Grey-brown cratered - largest moon)
-    const ganymede = new THREE.Mesh(
-      addDisposable(new MobileSphereGeometry(0.08, 24, 24)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        map: texMercury, // Reuse Mercury texture for moon-like cratering
-        color: 0x8a8479, // Desaturated grey-brown albedo
-        roughness: 0.9,
-        metalness: 0.1
-      }))
-    );
-    ganymede.castShadow = true;
-    ganymede.receiveShadow = true;
-    scene.add(ganymede);
-
-    // Callisto (Dark heavily cratered ice-rock)
-    const callisto = new THREE.Mesh(
-      addDisposable(new MobileSphereGeometry(0.075, 24, 24)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        map: texMercury,
-        color: 0x55514c, // Very dark grey-brown
-        roughness: 0.95,
-        metalness: 0.05
-      }))
-    );
-    callisto.castShadow = true;
-    callisto.receiveShadow = true;
-    scene.add(callisto);
-
-    // NASA's Juno spacecraft orbiting Jupiter
-    const junoProbe = new THREE.Group();
-    
-    // Main hexagonal body
-    const junoBody = new THREE.Mesh(
-      addDisposable(new THREE.CylinderGeometry(0.012, 0.012, 0.02, 6)), // Hexagonal shape
-      addDisposable(new THREE.MeshStandardMaterial({ color: 0x2c2c2c, metalness: 0.8, roughness: 0.2 }))
-    );
-    junoBody.rotation.x = Math.PI / 2;
-    junoProbe.add(junoBody);
-
-    // Juno's famous three-bladed solar array wings (propeller design)
-    const bladeGeo = addDisposable(new THREE.BoxGeometry(0.008, 0.08, 0.002));
-    const bladeMat = addDisposable(new THREE.MeshStandardMaterial({ color: 0x1e2d42, metalness: 0.6, roughness: 0.3 }));
-    for (let i = 0; i < 3; i++) {
-      const blade = new THREE.Mesh(bladeGeo, bladeMat);
-      blade.position.y = 0.04;
-      const bladeContainer = new THREE.Group();
-      bladeContainer.rotation.z = (i * Math.PI * 2) / 3;
-      bladeContainer.add(blade);
-      junoProbe.add(bladeContainer);
+    // Jupiter atmosphere shell - Disabled on mobile
+    if (!isMobile) {
+      const jAtmos = new THREE.Mesh(
+        addDisposable(new MobileSphereGeometry(3.7, 54, 54)),
+        createAtmosphereMaterial(new THREE.Color('#F59E0B'), 0.32, 2.2)
+      );
+      jupiter.add(jAtmos);
     }
 
-    // Magnetometer boom on one of the blades (slightly longer tip)
-    const magBoom = new THREE.Mesh(
-      addDisposable(new THREE.CylinderGeometry(0.002, 0.002, 0.025, 4)),
-      addDisposable(new THREE.MeshStandardMaterial({ color: 0xcccccc }))
-    );
-    magBoom.position.y = 0.09;
-    junoProbe.children[0].add(magBoom); // Attach to first blade
+    // Jupiter's 4 Galilean Moons: Io, Europa, Ganymede, and Callisto - Disabled on mobile
+    let io: THREE.Mesh | null = null;
+    let europa: THREE.Mesh | null = null;
+    let ganymede: THREE.Mesh | null = null;
+    let callisto: THREE.Mesh | null = null;
+    if (!isMobile) {
+      // Io (Yellow-orange volcanic)
+      io = new THREE.Mesh(
+        addDisposable(new MobileSphereGeometry(0.06, 24, 24)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0xe6df3c, // Sulfurous yellow-orange
+          roughness: 0.8,
+          metalness: 0.1
+        }))
+      );
+      io.castShadow = true;
+      io.receiveShadow = true;
+      scene.add(io);
 
-    scene.add(junoProbe);
+      // Europa (Icy white-grey)
+      europa = new THREE.Mesh(
+        addDisposable(new MobileSphereGeometry(0.05, 24, 24)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0xd9d7cd, // Reflective ice-white
+          roughness: 0.45,
+          metalness: 0.05
+        }))
+      );
+      europa.castShadow = true;
+      europa.receiveShadow = true;
+      scene.add(europa);
+
+      // Ganymede (Grey-brown cratered - largest moon)
+      ganymede = new THREE.Mesh(
+        addDisposable(new MobileSphereGeometry(0.08, 24, 24)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          map: texMercury, // Reuse Mercury texture for moon-like cratering
+          color: 0x8a8479, // Desaturated grey-brown albedo
+          roughness: 0.9,
+          metalness: 0.1
+        }))
+      );
+      ganymede.castShadow = true;
+      ganymede.receiveShadow = true;
+      scene.add(ganymede);
+
+      // Callisto (Dark heavily cratered ice-rock)
+      callisto = new THREE.Mesh(
+        addDisposable(new MobileSphereGeometry(0.075, 24, 24)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          map: texMercury,
+          color: 0x55514c, // Very dark grey-brown
+          roughness: 0.95,
+          metalness: 0.05
+        }))
+      );
+      callisto.castShadow = true;
+      callisto.receiveShadow = true;
+      scene.add(callisto);
+    }
+
+    // NASA's Juno spacecraft orbiting Jupiter - Disabled on mobile
+    let junoProbe: THREE.Group | null = null;
+    if (!isMobile) {
+      junoProbe = new THREE.Group();
+      
+      // Main hexagonal body
+      const junoBody = new THREE.Mesh(
+        addDisposable(new THREE.CylinderGeometry(0.012, 0.012, 0.02, 6)), // Hexagonal shape
+        addDisposable(new THREE.MeshStandardMaterial({ color: 0x2c2c2c, metalness: 0.8, roughness: 0.2 }))
+      );
+      junoBody.rotation.x = Math.PI / 2;
+      junoProbe.add(junoBody);
+
+      // Juno's famous three-bladed solar array wings (propeller design)
+      const bladeGeo = addDisposable(new THREE.BoxGeometry(0.008, 0.08, 0.002));
+      const bladeMat = addDisposable(new THREE.MeshStandardMaterial({ color: 0x1e2d42, metalness: 0.6, roughness: 0.3 }));
+      for (let i = 0; i < 3; i++) {
+        const blade = new THREE.Mesh(bladeGeo, bladeMat);
+        blade.position.y = 0.04;
+        const bladeContainer = new THREE.Group();
+        bladeContainer.rotation.z = (i * Math.PI * 2) / 3;
+        bladeContainer.add(blade);
+        junoProbe.add(bladeContainer);
+      }
+
+      // Magnetometer boom on one of the blades (slightly longer tip)
+      const magBoom = new THREE.Mesh(
+        addDisposable(new THREE.CylinderGeometry(0.002, 0.002, 0.025, 4)),
+        addDisposable(new THREE.MeshStandardMaterial({ color: 0xcccccc }))
+      );
+      magBoom.position.y = 0.09;
+      junoProbe.children[0].add(magBoom); // Attach to first blade
+
+      scene.add(junoProbe);
+    }
  
     // 8. SATURN (Custom analytical shadows)
     const saturnGroup = new THREE.Group();
@@ -1623,15 +1637,17 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     // Saturn Body
     const saturnMesh = new THREE.Mesh(
       addDisposable(new MobileSphereGeometry(2.8, 54, 54)),
-      addDisposable(new THREE.ShaderMaterial({
-        uniforms: {
-          map: { value: texSaturn },
-          tRingMap: { value: texSaturnRings },
-          uLocalSunPos: { value: new THREE.Vector3(0, 0, 290) }
-        },
-        vertexShader: saturnShaders.body.vertexShader,
-        fragmentShader: saturnShaders.body.fragmentShader
-      }))
+      isMobile
+        ? addDisposable(new THREE.MeshStandardMaterial({ map: texSaturn, roughness: 0.9, metalness: 0.1 }))
+        : addDisposable(new THREE.ShaderMaterial({
+            uniforms: {
+              map: { value: texSaturn },
+              tRingMap: { value: texSaturnRings },
+              uLocalSunPos: { value: new THREE.Vector3(0, 0, 290) }
+            },
+            vertexShader: saturnShaders.body.vertexShader,
+            fragmentShader: saturnShaders.body.fragmentShader
+          }))
     );
     saturnMesh.userData = { name: 'Saturn', isHovered: false };
     saturnMesh.castShadow = true;
@@ -1650,17 +1666,26 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     }
     const ringMesh = new THREE.Mesh(
       ringGeo,
-      addDisposable(new THREE.ShaderMaterial({
-        uniforms: {
-          map: { value: texSaturnRings },
-          uLocalSunPos: { value: new THREE.Vector3(0, 0, 290) }
-        },
-        vertexShader: saturnShaders.ring.vertexShader,
-        fragmentShader: saturnShaders.ring.fragmentShader,
-        transparent: true,
-        side: THREE.DoubleSide,
-        depthWrite: true
-      }))
+      isMobile
+        ? addDisposable(new THREE.MeshStandardMaterial({
+            map: texSaturnRings,
+            transparent: true,
+            side: THREE.DoubleSide,
+            depthWrite: true,
+            roughness: 0.9,
+            metalness: 0.1
+          }))
+        : addDisposable(new THREE.ShaderMaterial({
+            uniforms: {
+              map: { value: texSaturnRings },
+              uLocalSunPos: { value: new THREE.Vector3(0, 0, 290) }
+            },
+            vertexShader: saturnShaders.ring.vertexShader,
+            fragmentShader: saturnShaders.ring.fragmentShader,
+            transparent: true,
+            side: THREE.DoubleSide,
+            depthWrite: true
+          }))
     );
     ringMesh.rotation.x = -Math.PI / 2;
     saturnGroup.add(ringMesh);
@@ -1669,64 +1694,73 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     planets['Saturn'] = saturnGroup;
     interactableMeshes.push(saturnMesh);
  
-    // Saturn atmosphere shell
-    const sAtmos = new THREE.Mesh(
-      addDisposable(new MobileSphereGeometry(3.0, 54, 54)),
-      createAtmosphereMaterial(new THREE.Color('#E8D49A'), 0.3, 2.0)
-    );
-    saturnMesh.add(sAtmos);
+    // Saturn atmosphere shell - Disabled on mobile
+    if (!isMobile) {
+      const sAtmos = new THREE.Mesh(
+        addDisposable(new MobileSphereGeometry(3.0, 54, 54)),
+        createAtmosphereMaterial(new THREE.Color('#E8D49A'), 0.3, 2.0)
+      );
+      saturnMesh.add(sAtmos);
+    }
 
-    // Titan (Orange thick atmosphere moon)
-    const titan = new THREE.Mesh(
-      addDisposable(new MobileSphereGeometry(0.065, 24, 24)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0xd1a156, // Golden orange albedo
-        roughness: 0.95,
-        metalness: 0.0
-      }))
-    );
-    titan.castShadow = false;
-    titan.receiveShadow = true;
-    saturnGroup.add(titan);
+    // Titan (Orange thick atmosphere moon) and Enceladus - Disabled on mobile
+    let titan: THREE.Mesh | null = null;
+    let enceladus: THREE.Mesh | null = null;
+    if (!isMobile) {
+      titan = new THREE.Mesh(
+        addDisposable(new MobileSphereGeometry(0.065, 24, 24)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0xd1a156, // Golden orange albedo
+          roughness: 0.95,
+          metalness: 0.0
+        }))
+      );
+      titan.castShadow = false;
+      titan.receiveShadow = true;
+      saturnGroup.add(titan);
 
-    // Enceladus (Highly reflective icy white moon)
-    const enceladus = new THREE.Mesh(
-      addDisposable(new MobileSphereGeometry(0.015, 16, 16)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        roughness: 0.35,
-        metalness: 0.1
-      }))
-    );
-    enceladus.castShadow = false;
-    enceladus.receiveShadow = true;
-    saturnGroup.add(enceladus);
+      // Enceladus (Highly reflective icy white moon)
+      enceladus = new THREE.Mesh(
+        addDisposable(new MobileSphereGeometry(0.015, 16, 16)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          roughness: 0.35,
+          metalness: 0.1
+        }))
+      );
+      enceladus.castShadow = false;
+      enceladus.receiveShadow = true;
+      saturnGroup.add(enceladus);
+    }
 
-    // NASA's Cassini spacecraft
-    const cassiniProbe = new THREE.Group();
-    const cassiniBody = new THREE.Mesh(
-      addDisposable(new THREE.CylinderGeometry(0.015, 0.015, 0.03, 8)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0xd4af37, // Gold foil bus
-        metalness: 0.8,
-        roughness: 0.2
-      }))
-    );
-    cassiniBody.rotation.x = Math.PI / 2;
-    cassiniProbe.add(cassiniBody);
+    // NASA's Cassini spacecraft - Disabled on mobile
+    let cassiniProbe: THREE.Group | null = null;
+    if (!isMobile) {
+      cassiniProbe = new THREE.Group();
+      const cassiniBody = new THREE.Mesh(
+        addDisposable(new THREE.CylinderGeometry(0.015, 0.015, 0.03, 8)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0xd4af37, // Gold foil bus
+          metalness: 0.8,
+          roughness: 0.2
+        }))
+      );
+      cassiniBody.rotation.x = Math.PI / 2;
+      cassiniProbe.add(cassiniBody);
 
-    const cassiniDish = new THREE.Mesh(
-      addDisposable(new THREE.ConeGeometry(0.02, 0.01, 16)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0xffffff, // White high-gain antenna dish
-        roughness: 0.6,
-        metalness: 0.1
-      }))
-    );
-    cassiniDish.rotation.x = -Math.PI / 2;
-    cassiniDish.position.z = 0.018;
-    cassiniProbe.add(cassiniDish);
-    saturnGroup.add(cassiniProbe);
+      const cassiniDish = new THREE.Mesh(
+        addDisposable(new THREE.ConeGeometry(0.02, 0.01, 16)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0xffffff, // White high-gain antenna dish
+          roughness: 0.6,
+          metalness: 0.1
+        }))
+      );
+      cassiniDish.rotation.x = -Math.PI / 2;
+      cassiniDish.position.z = 0.018;
+      cassiniProbe.add(cassiniDish);
+      saturnGroup.add(cassiniProbe);
+    }
  
     // 9. URANUS
     const uranusGroup = new THREE.Group();
@@ -1764,42 +1798,50 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     planets['Uranus'] = uranusGroup;
     interactableMeshes.push(uranusMesh);
  
-    // Uranus atmosphere shell
-    const uAtmos = new THREE.Mesh(
-      addDisposable(new MobileSphereGeometry(2.14, 48, 48)),
-      createAtmosphereMaterial(new THREE.Color('#93E3E3'), 0.42, 2.0)
-    );
-    uranusMesh.add(uAtmos);
+    // Uranus atmosphere shell - Disabled on mobile
+    if (!isMobile) {
+      const uAtmos = new THREE.Mesh(
+        addDisposable(new MobileSphereGeometry(2.14, 48, 48)),
+        createAtmosphereMaterial(new THREE.Color('#93E3E3'), 0.42, 2.0)
+      );
+      uranusMesh.add(uAtmos);
+    }
 
-    // Titania (Grey cratered moon)
-    const titania = new THREE.Mesh(
-      addDisposable(new MobileSphereGeometry(0.025, 16, 16)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0xa0a0a0,
-        roughness: 0.9,
-        metalness: 0.1
-      }))
-    );
-    titania.castShadow = false;
-    titania.receiveShadow = true;
-    uranusGroup.add(titania);
+    // Titania (Grey cratered moon) - Disabled on mobile
+    let titania: THREE.Mesh | null = null;
+    if (!isMobile) {
+      titania = new THREE.Mesh(
+        addDisposable(new MobileSphereGeometry(0.025, 16, 16)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0xa0a0a0,
+          roughness: 0.9,
+          metalness: 0.1
+        }))
+      );
+      titania.castShadow = false;
+      titania.receiveShadow = true;
+      uranusGroup.add(titania);
+    }
 
-    // NASA's Voyager 2 spacecraft (Uranus flyby)
-    const voyager2Uranus = new THREE.Group();
-    const voyagerBody = new THREE.Mesh(
-      addDisposable(new THREE.BoxGeometry(0.015, 0.015, 0.015)),
-      addDisposable(new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.2 }))
-    );
-    voyager2Uranus.add(voyagerBody);
+    // NASA's Voyager 2 spacecraft (Uranus flyby) - Disabled on mobile
+    let voyager2Uranus: THREE.Group | null = null;
+    if (!isMobile) {
+      voyager2Uranus = new THREE.Group();
+      const voyagerBody = new THREE.Mesh(
+        addDisposable(new THREE.BoxGeometry(0.015, 0.015, 0.015)),
+        addDisposable(new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.2 }))
+      );
+      voyager2Uranus.add(voyagerBody);
 
-    const voyagerDish = new THREE.Mesh(
-      addDisposable(new THREE.ConeGeometry(0.02, 0.008, 12)),
-      addDisposable(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.1 }))
-    );
-    voyagerDish.rotation.x = Math.PI / 2;
-    voyagerDish.position.z = 0.01;
-    voyager2Uranus.add(voyagerDish);
-    uranusGroup.add(voyager2Uranus);
+      const voyagerDish = new THREE.Mesh(
+        addDisposable(new THREE.ConeGeometry(0.02, 0.008, 12)),
+        addDisposable(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.1 }))
+      );
+      voyagerDish.rotation.x = Math.PI / 2;
+      voyagerDish.position.z = 0.01;
+      voyager2Uranus.add(voyagerDish);
+      uranusGroup.add(voyager2Uranus);
+    }
  
     // 10. NEPTUNE
     const neptuneGroup = new THREE.Group();
@@ -1822,68 +1864,80 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     planets['Neptune'] = neptuneGroup;
     interactableMeshes.push(neptuneMesh);
  
-    // Neptune atmosphere shell
-    const nAtmos = new THREE.Mesh(
-      addDisposable(new MobileSphereGeometry(2.02, 48, 48)),
-      createAtmosphereMaterial(new THREE.Color('#3B82F6'), 0.5, 2.0)
-    );
-    neptuneMesh.add(nAtmos);
-
-    // Triton moon (retrograde orbit!)
-    const triton = new THREE.Mesh(
-      addDisposable(new MobileSphereGeometry(0.038, 20, 20)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0xd9d5c5, // Pale pinkish-grey/yellow albedo
-        roughness: 0.8,
-        metalness: 0.1
-      }))
-    );
-    triton.castShadow = false;
-    triton.receiveShadow = true;
-    neptuneGroup.add(triton);
-
-    // NASA's Voyager 2 spacecraft (Neptune flyby)
-    const voyager2Neptune = new THREE.Group();
-    const voyager2NeptuneBody = new THREE.Mesh(
-      addDisposable(new THREE.BoxGeometry(0.015, 0.015, 0.015)),
-      addDisposable(new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.2 }))
-    );
-    voyager2Neptune.add(voyager2NeptuneBody);
-
-    const voyager2NeptuneDish = new THREE.Mesh(
-      addDisposable(new THREE.ConeGeometry(0.02, 0.008, 12)),
-      addDisposable(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.1 }))
-    );
-    voyager2NeptuneDish.rotation.x = Math.PI / 2;
-    voyager2NeptuneDish.position.z = 0.01;
-    voyager2Neptune.add(voyager2NeptuneDish);
-    neptuneGroup.add(voyager2Neptune);
-
-    // --- COMET ---
-    const cometGroup = new THREE.Group();
-    const cometHead = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(0.12, 16, 16)),
-      addDisposable(new THREE.MeshBasicMaterial({ color: 0xffffff }))
-    );
-    cometGroup.add(cometHead);
-    const cometTailMat = addDisposable(new THREE.SpriteMaterial({
-      map: texGlow,
-      color: 0x93C5FD,
-      transparent: true,
-      opacity: 0.4,
-      blending: THREE.AdditiveBlending
-    }));
-    for (let i = 0; i < 80; i++) {
-      const tail = new THREE.Sprite(cometTailMat);
-      const scale = 0.45 * (1 - i / 80);
-      tail.scale.set(scale, scale, 1);
-      tail.position.set(i * 0.08, 0, 0);
-      cometGroup.add(tail);
+    // Neptune atmosphere shell - Disabled on mobile
+    if (!isMobile) {
+      const nAtmos = new THREE.Mesh(
+        addDisposable(new MobileSphereGeometry(2.02, 48, 48)),
+        createAtmosphereMaterial(new THREE.Color('#3B82F6'), 0.5, 2.0)
+      );
+      neptuneMesh.add(nAtmos);
     }
-    scene.add(cometGroup);
+
+    // Triton moon (retrograde orbit!) - Disabled on mobile
+    let triton: THREE.Mesh | null = null;
+    if (!isMobile) {
+      triton = new THREE.Mesh(
+        addDisposable(new MobileSphereGeometry(0.038, 20, 20)),
+        addDisposable(new THREE.MeshStandardMaterial({
+          color: 0xd9d5c5, // Pale pinkish-grey/yellow albedo
+          roughness: 0.8,
+          metalness: 0.1
+        }))
+      );
+      triton.castShadow = false;
+      triton.receiveShadow = true;
+      neptuneGroup.add(triton);
+    }
+
+    // NASA's Voyager 2 spacecraft (Neptune flyby) - Disabled on mobile
+    let voyager2Neptune: THREE.Group | null = null;
+    if (!isMobile) {
+      voyager2Neptune = new THREE.Group();
+      const voyager2NeptuneBody = new THREE.Mesh(
+        addDisposable(new THREE.BoxGeometry(0.015, 0.015, 0.015)),
+        addDisposable(new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.2 }))
+      );
+      voyager2Neptune.add(voyager2NeptuneBody);
+
+      const voyager2NeptuneDish = new THREE.Mesh(
+        addDisposable(new THREE.ConeGeometry(0.02, 0.008, 12)),
+        addDisposable(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.1 }))
+      );
+      voyager2NeptuneDish.rotation.x = Math.PI / 2;
+      voyager2NeptuneDish.position.z = 0.01;
+      voyager2Neptune.add(voyager2NeptuneDish);
+      neptuneGroup.add(voyager2Neptune);
+    }
+
+    // --- COMET --- Disabled on mobile (creates 81 draw calls per frame which is extremely heavy)
+    let cometGroup: THREE.Group | null = null;
     let cometActive = false;
     let cometProgress = 0;
-    setInterval(() => { if (!cometActive) { cometActive = true; cometProgress = 0; } }, 18000);
+    let cometInterval: any = null;
+    if (!isMobile) {
+      cometGroup = new THREE.Group();
+      const cometHead = new THREE.Mesh(
+        addDisposable(new THREE.SphereGeometry(0.12, 16, 16)),
+        addDisposable(new THREE.MeshBasicMaterial({ color: 0xffffff }))
+      );
+      cometGroup.add(cometHead);
+      const cometTailMat = addDisposable(new THREE.SpriteMaterial({
+        map: texGlow,
+        color: 0x93C5FD,
+        transparent: true,
+        opacity: 0.4,
+        blending: THREE.AdditiveBlending
+      }));
+      for (let i = 0; i < 80; i++) {
+        const tail = new THREE.Sprite(cometTailMat);
+        const scale = 0.45 * (1 - i / 80);
+        tail.scale.set(scale, scale, 1);
+        tail.position.set(i * 0.08, 0, 0);
+        cometGroup.add(tail);
+      }
+      scene.add(cometGroup);
+      cometInterval = setInterval(() => { if (!cometActive) { cometActive = true; cometProgress = 0; } }, 18000);
+    }
 
     // Set initial camera
     camera.position.set(0, 0, 32);
@@ -1915,9 +1969,11 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       const dt = clock.getDelta();
       const time = clock.getElapsedTime();
 
-      // Synchronize Lenis scroll calculation with our frame loop (avoids frame judder)
-      lenis.raf(time * 1000);
-      ScrollTrigger.update();
+      // Synchronize Lenis scroll calculation with our frame loop on desktop (avoids frame judder)
+      if (lenis) {
+        lenis.raf(time * 1000);
+        ScrollTrigger.update();
+      }
 
       // Hover Raycasting (run once per frame instead of on every mousemove event!)
       raycaster.setFromCamera(mouse, camera);
@@ -1964,8 +2020,8 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       // Rotate asteroid belt around the Z-axis (swirls around the slalom flight path)
       asteroidBelt.rotation.z += 0.00022;
 
-      // Comet logic
-      if (cometActive) {
+      // Comet logic - Disabled on mobile
+      if (cometGroup && cometActive) {
         cometProgress += dt * 0.15;
         if (cometProgress > 1) cometActive = false;
         else {
@@ -1975,7 +2031,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
           const dir = new THREE.Vector3().subVectors(end, start).normalize();
           cometGroup.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir.negate());
         }
-      } else {
+      } else if (cometGroup) {
         cometGroup.position.set(0, 1000, 0);
       }
 
@@ -2011,35 +2067,43 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       // earthClouds.rotation.y += 0.0004; // independent cloud drift (REMOVED)
       mars.rotation.y += 0.0027;
       
-      // Orbiting Mars Moons
-      phobos.position.x = Math.cos(time * 0.9) * 1.1;
-      phobos.position.z = Math.sin(time * 0.9) * 1.1;
-      phobos.rotation.y += 0.015;
+      // Orbiting Mars Moons - Disabled on mobile
+      if (phobos && deimos) {
+        phobos.position.x = Math.cos(time * 0.9) * 1.1;
+        phobos.position.z = Math.sin(time * 0.9) * 1.1;
+        phobos.rotation.y += 0.015;
 
-      deimos.position.x = Math.cos(time * 0.5 + 2.0) * 1.6;
-      deimos.position.z = Math.sin(time * 0.5 + 2.0) * 1.6;
-      deimos.rotation.y += 0.01;
+        deimos.position.x = Math.cos(time * 0.5 + 2.0) * 1.6;
+        deimos.position.z = Math.sin(time * 0.5 + 2.0) * 1.6;
+        deimos.rotation.y += 0.01;
+      }
 
-      // Sun: Parker Solar Probe Orbit (Close solar dive)
-      parkerProbe.position.x = Math.cos(time * 0.25) * 8.8;
-      parkerProbe.position.z = Math.sin(time * 0.25) * 8.8;
-      parkerProbe.position.y = Math.sin(time * 0.12) * 0.8; // Inclined orbital plane
-      parkerProbe.lookAt(new THREE.Vector3(0, 0, 0)); // Point white heat shield towards Sun
+      // Sun: Parker Solar Probe Orbit (Close solar dive) - Disabled on mobile
+      if (parkerProbe) {
+        parkerProbe.position.x = Math.cos(time * 0.25) * 8.8;
+        parkerProbe.position.z = Math.sin(time * 0.25) * 8.8;
+        parkerProbe.position.y = Math.sin(time * 0.12) * 0.8; // Inclined orbital plane
+        parkerProbe.lookAt(new THREE.Vector3(0, 0, 0)); // Point white heat shield towards Sun
+      }
 
-      // Mercury: MESSENGER Probe Orbit
-      messengerProbe.position.x = mercury.position.x + Math.cos(time * 0.6) * 0.92;
-      messengerProbe.position.z = mercury.position.z + Math.sin(time * 0.6) * 0.92;
-      messengerProbe.position.y = mercury.position.y + Math.sin(time * 0.35) * 0.18; // Highly inclined orbit
-      // Always point white sunshade towards the Sun (away from the probe bus center)
-      const sunDir = new THREE.Vector3(0, 0, 0).sub(messengerProbe.position).normalize();
-      messengerProbe.lookAt(messengerProbe.position.clone().add(sunDir));
+      // Mercury: MESSENGER Probe Orbit - Disabled on mobile
+      if (messengerProbe) {
+        messengerProbe.position.x = mercury.position.x + Math.cos(time * 0.6) * 0.92;
+        messengerProbe.position.z = mercury.position.z + Math.sin(time * 0.6) * 0.92;
+        messengerProbe.position.y = mercury.position.y + Math.sin(time * 0.35) * 0.18; // Highly inclined orbit
+        // Always point white sunshade towards the Sun (away from the probe bus center)
+        const sunDir = new THREE.Vector3(0, 0, 0).sub(messengerProbe.position).normalize();
+        messengerProbe.lookAt(messengerProbe.position.clone().add(sunDir));
+      }
 
-      // Venus: Magellan Probe Orbit
-      magellanProbe.position.x = venus.position.x + Math.cos(time * 0.4) * 1.65;
-      magellanProbe.position.z = venus.position.z + Math.sin(time * 0.4) * 1.65;
-      magellanProbe.position.y = venus.position.y + Math.sin(time * 0.25) * 0.15; // Inclination
-      // Point high-gain mapping dish directly at Venus center
-      magellanProbe.lookAt(venus.position);
+      // Venus: Magellan Probe Orbit - Disabled on mobile
+      if (magellanProbe) {
+        magellanProbe.position.x = venus.position.x + Math.cos(time * 0.4) * 1.65;
+        magellanProbe.position.z = venus.position.z + Math.sin(time * 0.4) * 1.65;
+        magellanProbe.position.y = venus.position.y + Math.sin(time * 0.25) * 0.15; // Inclination
+        // Point high-gain mapping dish directly at Venus center
+        magellanProbe.lookAt(venus.position);
+      }
 
       // Earth: Moon Orbit
       moon.position.x = earth.position.x + Math.cos(time * 0.18) * 2.6;
@@ -2047,96 +2111,112 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       moon.position.y = earth.position.y + Math.sin(time * 0.18 * 0.5) * 0.35; // Inclined orbit (5 degrees in real life)
       moon.rotation.y += 0.001; // Synchronous rotation (approximate)
 
-      // Earth: International Space Station (ISS) Orbit (Low, fast orbit)
-      iss.position.x = earth.position.x + Math.cos(time * 0.85) * 1.55;
-      iss.position.z = earth.position.z + Math.sin(time * 0.85) * 1.55;
-      iss.position.y = earth.position.y + Math.sin(time * 0.85 * 0.8) * 0.25;
-      iss.lookAt(earth.position);
-      iss.rotateX(Math.PI / 2); // Keep solar panels aligned perpendicular to flight direction
+      // Earth: International Space Station (ISS) Orbit (Low, fast orbit) - Disabled on mobile
+      if (iss) {
+        iss.position.x = earth.position.x + Math.cos(time * 0.85) * 1.55;
+        iss.position.z = earth.position.z + Math.sin(time * 0.85) * 1.55;
+        iss.position.y = earth.position.y + Math.sin(time * 0.85 * 0.8) * 0.25;
+        iss.lookAt(earth.position);
+        iss.rotateX(Math.PI / 2); // Keep solar panels aligned perpendicular to flight direction
+      }
 
-      // Mars: MRO Orbit
-      mroProbe.position.x = mars.position.x + Math.cos(time * 0.7) * 1.35;
-      mroProbe.position.z = mars.position.z + Math.sin(time * 0.7) * 1.35;
-      mroProbe.position.y = mars.position.y + Math.sin(time * 0.7 * 0.9) * 0.3; // Polar inclined orbit
-      mroProbe.lookAt(mars.position);
+      // Mars: MRO Orbit - Disabled on mobile
+      if (mroProbe) {
+        mroProbe.position.x = mars.position.x + Math.cos(time * 0.7) * 1.35;
+        mroProbe.position.z = mars.position.z + Math.sin(time * 0.7) * 1.35;
+        mroProbe.position.y = mars.position.y + Math.sin(time * 0.7 * 0.9) * 0.3; // Polar inclined orbit
+        mroProbe.lookAt(mars.position);
+      }
 
-      // Jupiter: Io Orbit
-      io.position.x = jupiter.position.x + Math.cos(time * 0.18) * 5.2;
-      io.position.z = jupiter.position.z + Math.sin(time * 0.18) * 5.2;
-      io.rotation.y += 0.01;
+      // Jupiter: Galilean Moons - Disabled on mobile
+      if (io && europa && ganymede && callisto) {
+        io.position.x = jupiter.position.x + Math.cos(time * 0.18) * 5.2;
+        io.position.z = jupiter.position.z + Math.sin(time * 0.18) * 5.2;
+        io.rotation.y += 0.01;
 
-      // Jupiter: Europa Orbit
-      europa.position.x = jupiter.position.x + Math.cos(time * 0.13 + 1.5) * 7.2;
-      europa.position.z = jupiter.position.z + Math.sin(time * 0.13 + 1.5) * 7.2;
-      europa.rotation.y += 0.008;
+        europa.position.x = jupiter.position.x + Math.cos(time * 0.13 + 1.5) * 7.2;
+        europa.position.z = jupiter.position.z + Math.sin(time * 0.13 + 1.5) * 7.2;
+        europa.rotation.y += 0.008;
 
-      // Jupiter: Ganymede Orbit
-      ganymede.position.x = jupiter.position.x + Math.cos(time * 0.09 + 3.0) * 9.8;
-      ganymede.position.z = jupiter.position.z + Math.sin(time * 0.09 + 3.0) * 9.8;
-      ganymede.rotation.y += 0.005;
+        ganymede.position.x = jupiter.position.x + Math.cos(time * 0.09 + 3.0) * 9.8;
+        ganymede.position.z = jupiter.position.z + Math.sin(time * 0.09 + 3.0) * 9.8;
+        ganymede.rotation.y += 0.005;
 
-      // Jupiter: Callisto Orbit
-      callisto.position.x = jupiter.position.x + Math.cos(time * 0.05 + 4.5) * 12.5;
-      callisto.position.z = jupiter.position.z + Math.sin(time * 0.05 + 4.5) * 12.5;
-      callisto.rotation.y += 0.003;
+        callisto.position.x = jupiter.position.x + Math.cos(time * 0.05 + 4.5) * 12.5;
+        callisto.position.z = jupiter.position.z + Math.sin(time * 0.05 + 4.5) * 12.5;
+        callisto.rotation.y += 0.003;
+      }
 
-      // Jupiter: Juno Probe Orbit (Highly elliptical polar orbit)
-      const junoAngle = time * 0.08;
-      const junoRadius = 9.0 + Math.sin(junoAngle) * 5.0; // Varies between 4.0 and 14.0 from Jupiter center
-      junoProbe.position.x = jupiter.position.x + Math.cos(junoAngle) * junoRadius * 0.2; // Squashed orbit
-      junoProbe.position.z = jupiter.position.z + Math.sin(junoAngle) * junoRadius;
-      junoProbe.position.y = jupiter.position.y + Math.cos(junoAngle) * junoRadius * 0.9; // High polar inclination
-      junoProbe.lookAt(jupiter.position);
+      // Jupiter: Juno Probe Orbit - Disabled on mobile
+      if (junoProbe) {
+        const junoAngle = time * 0.08;
+        const junoRadius = 9.0 + Math.sin(junoAngle) * 5.0; // Varies between 4.0 and 14.0 from Jupiter center
+        junoProbe.position.x = jupiter.position.x + Math.cos(junoAngle) * junoRadius * 0.2; // Squashed orbit
+        junoProbe.position.z = jupiter.position.z + Math.sin(junoAngle) * junoRadius;
+        junoProbe.position.y = jupiter.position.y + Math.cos(junoAngle) * junoRadius * 0.9; // High polar inclination
+        junoProbe.lookAt(jupiter.position);
+      }
 
       jupiter.rotation.y += 0.0068;
       saturnMesh.rotation.y += 0.0062;
 
-      // Saturn: Titan Orbit
-      titan.position.x = Math.cos(time * 0.08) * 7.5;
-      titan.position.z = Math.sin(time * 0.08) * 7.5;
-      titan.rotation.y += 0.005;
+      // Saturn Moons: Titan and Enceladus - Disabled on mobile
+      if (titan && enceladus) {
+        titan.position.x = Math.cos(time * 0.08) * 7.5;
+        titan.position.z = Math.sin(time * 0.08) * 7.5;
+        titan.rotation.y += 0.005;
 
-      // Saturn: Enceladus Orbit (inside/near rings)
-      enceladus.position.x = Math.cos(time * 0.18 + 2.0) * 3.3;
-      enceladus.position.z = Math.sin(time * 0.18 + 2.0) * 3.3;
-      enceladus.rotation.y += 0.01;
+        enceladus.position.x = Math.cos(time * 0.18 + 2.0) * 3.3;
+        enceladus.position.z = Math.sin(time * 0.18 + 2.0) * 3.3;
+        enceladus.rotation.y += 0.01;
+      }
 
-      // Saturn: Cassini Probe Orbit
-      const cassiniAngle = time * 0.12;
-      cassiniProbe.position.x = Math.cos(cassiniAngle) * 7.0;
-      cassiniProbe.position.z = Math.sin(cassiniAngle) * 7.0;
-      cassiniProbe.position.y = Math.sin(cassiniAngle) * 0.5; // Inclination
-      cassiniProbe.lookAt(new THREE.Vector3(0, 0, 0)); // Point antenna dish at Saturn
+      // Saturn: Cassini Probe Orbit - Disabled on mobile
+      if (cassiniProbe) {
+        const cassiniAngle = time * 0.12;
+        cassiniProbe.position.x = Math.cos(cassiniAngle) * 7.0;
+        cassiniProbe.position.z = Math.sin(cassiniAngle) * 7.0;
+        cassiniProbe.position.y = Math.sin(cassiniAngle) * 0.5; // Inclination
+        cassiniProbe.lookAt(new THREE.Vector3(0, 0, 0)); // Point antenna dish at Saturn
+      }
       
       // Uranus rotation (side retrograde)
       uranusMesh.rotation.y -= 0.0039;
 
-      // Uranus: Titania Orbit
-      titania.position.x = Math.cos(time * 0.15) * 3.8;
-      titania.position.z = Math.sin(time * 0.15) * 3.8;
-      titania.rotation.y += 0.005;
+      // Uranus Moon: Titania - Disabled on mobile
+      if (titania) {
+        titania.position.x = Math.cos(time * 0.15) * 3.8;
+        titania.position.z = Math.sin(time * 0.15) * 3.8;
+        titania.rotation.y += 0.005;
+      }
 
-      // Uranus: Voyager 2 Flyby
-      const v2TimeU = (time * 0.06) % 6.0;
-      voyager2Uranus.position.x = -5.0 + v2TimeU * 2.0;
-      voyager2Uranus.position.z = 3.0 - v2TimeU * 1.5;
-      voyager2Uranus.position.y = -0.8 + v2TimeU * 0.4;
-      voyager2Uranus.lookAt(new THREE.Vector3(0, 0, 0)); // Point towards Uranus center
+      // Uranus: Voyager 2 Flyby - Disabled on mobile
+      if (voyager2Uranus) {
+        const v2TimeU = (time * 0.06) % 6.0;
+        voyager2Uranus.position.x = -5.0 + v2TimeU * 2.0;
+        voyager2Uranus.position.z = 3.0 - v2TimeU * 1.5;
+        voyager2Uranus.position.y = -0.8 + v2TimeU * 0.4;
+        voyager2Uranus.lookAt(new THREE.Vector3(0, 0, 0)); // Point towards Uranus center
+      }
       
       // Neptune rotation
       neptuneMesh.rotation.y += 0.0042;
 
-      // Neptune: Triton Orbit (retrograde: negative speed multiplier)
-      triton.position.x = Math.cos(-time * 0.11) * 3.2;
-      triton.position.z = Math.sin(-time * 0.11) * 3.2;
-      triton.rotation.y += 0.004;
+      // Neptune Moon: Triton - Disabled on mobile
+      if (triton) {
+        triton.position.x = Math.cos(-time * 0.11) * 3.2;
+        triton.position.z = Math.sin(-time * 0.11) * 3.2;
+        triton.rotation.y += 0.004;
+      }
 
-      // Neptune: Voyager 2 Flyby (past Neptune)
-      const v2TimeN = (time * 0.05) % 6.0;
-      voyager2Neptune.position.x = -4.5 + v2TimeN * 1.8;
-      voyager2Neptune.position.z = 2.5 - v2TimeN * 1.3;
-      voyager2Neptune.position.y = -0.6 + v2TimeN * 0.35;
-      voyager2Neptune.lookAt(new THREE.Vector3(0, 0, 0)); // Point towards Neptune center
+      // Neptune: Voyager 2 Flyby - Disabled on mobile
+      if (voyager2Neptune) {
+        const v2TimeN = (time * 0.05) % 6.0;
+        voyager2Neptune.position.x = -4.5 + v2TimeN * 1.8;
+        voyager2Neptune.position.z = 2.5 - v2TimeN * 1.3;
+        voyager2Neptune.position.y = -0.6 + v2TimeN * 0.35;
+        voyager2Neptune.lookAt(new THREE.Vector3(0, 0, 0)); // Point towards Neptune center
+      }
 
       // Space dust tracking (optimized direct TypedArray edits)
       const dustPosAttr = dustGeo.attributes.position as THREE.BufferAttribute;
@@ -2274,19 +2354,24 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     animate();
 
     // --- GSAP SCROLL SLALOM TIMELINE ---
+    // Snapping is disabled on mobile to prevent programmatic window scrolling fighting touch momentum.
+    // Scrub is lowered to 0.3 on mobile for an immediate reaction to native scroll velocity.
+    const scrollTriggerConfig: any = {
+      trigger: containerRef.current,
+      start: "top top",
+      end: "bottom bottom",
+      scrub: isMobile ? 0.3 : 0.85,
+    };
+    if (!isMobile) {
+      scrollTriggerConfig.snap = {
+        snapTo: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+        duration: { min: 0.25, max: 0.65 },
+        delay: 0.05,
+        ease: "power2.out"
+      };
+    }
     const tl = gsap.timeline({
-      scrollTrigger: {
-        trigger: containerRef.current,
-        start: "top top",
-        end: "bottom bottom",
-        scrub: 0.85, // Smooth camera deceleration glide
-        snap: {
-          snapTo: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], // Snaps to each planet stop and the overview
-          duration: { min: 0.25, max: 0.65 },
-          delay: 0.05,
-          ease: "power2.out"
-        }
-      }
+      scrollTrigger: scrollTriggerConfig
     });
     stInstance = tl.scrollTrigger;
 
@@ -2337,7 +2422,8 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       window.removeEventListener('mousemove', onMouseMove);
       cancelAnimationFrame(frame);
       ScrollTrigger.getAll().forEach(t => t.kill());
-      lenis.destroy();
+      if (lenis) lenis.destroy();
+      if (cometInterval) clearInterval(cometInterval);
       
       composer.dispose();
       disposables.forEach(d => d.dispose());
