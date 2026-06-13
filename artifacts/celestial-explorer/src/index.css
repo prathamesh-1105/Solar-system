@@ -158,3 +158,11 @@ html, body { cursor: none !important; }
 ::-webkit-scrollbar-thumb:hover {
   background: #444;
 }
+
+/* GPU Hardware Acceleration for smooth animations and scroll reveals */
+.reveal-text, .smooth-gpu {
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}
+

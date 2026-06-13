@@ -701,16 +701,13 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
 
     // --- LENIS SETUP ---
     const lenis = new Lenis({
-      lerp: 0.05,
-      infinite: false,
+      duration: 1.2,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), // Exponential deceleration ease
       smoothWheel: true,
+      syncTouch: true,
     });
 
     lenis.on('scroll', ScrollTrigger.update);
-    gsap.ticker.add((time) => {
-      lenis.raf(time * 1000);
-    });
-    gsap.ticker.lagSmoothing(0);
 
     // --- THREEJS SETUP ---
     const scene = new THREE.Scene();
@@ -746,9 +743,9 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
     
-    // Volumetric space bloom pass
+    // Volumetric space bloom pass (optimized at half resolution for high FPS)
     const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2),
       0.48,  // Strength
       0.35,  // Radius
       0.82   // Threshold (only glowing sun/corona/atmosphere shells bloom)
@@ -1884,9 +1881,28 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       currentMouseNDCY = -(e.clientY / window.innerHeight) * 2 + 1;
       mouse.x = currentMouseNDCX;
       mouse.y = currentMouseNDCY;
-      
-      raycaster.setFromCamera(mouse, camera);
+    };
 
+    window.addEventListener('mousemove', onMouseMove);
+
+    // Cache the ScrollTrigger reference outside the loop, initialized as null
+    let stInstance: any = null;
+
+    // --- ANIMATION LOOP ---
+    let frame = 0;
+    const animate = () => {
+      if (!isMounted) return;
+      frame = requestAnimationFrame(animate);
+      
+      const dt = clock.getDelta();
+      const time = clock.getElapsedTime();
+
+      // Synchronize Lenis scroll calculation with our frame loop (avoids frame judder)
+      lenis.raf(time * 1000);
+      ScrollTrigger.update();
+
+      // Hover Raycasting (run once per frame instead of on every mousemove event!)
+      raycaster.setFromCamera(mouse, camera);
       const intersects = raycaster.intersectObjects(interactableMeshes, false);
       let hoveredObj = null;
       if (intersects.length > 0) {
@@ -1906,17 +1922,6 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
           }
         }
       });
-    };
-
-    window.addEventListener('mousemove', onMouseMove);
-
-    // --- ANIMATION LOOP ---
-    let frame = 0;
-    const animate = () => {
-      if (!isMounted) return;
-      frame = requestAnimationFrame(animate);
-      const dt = clock.getDelta();
-      const time = clock.getElapsedTime();
 
       // Update shader materials
       if (sunMat.uniforms) sunMat.uniforms.time.value = time;
@@ -2115,23 +2120,30 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       voyager2Neptune.position.y = -0.6 + v2TimeN * 0.35;
       voyager2Neptune.lookAt(new THREE.Vector3(0, 0, 0)); // Point towards Neptune center
 
-      // Space dust tracking
+      // Space dust tracking (optimized direct TypedArray edits)
       const dustPosAttr = dustGeo.attributes.position as THREE.BufferAttribute;
+      const dArr = dustPosAttr.array as Float32Array;
+      const camX = camera.position.x;
+      const camY = camera.position.y;
+      const camZ = camera.position.z;
       for (let i = 0; i < dustCount; i++) {
-        dustOffsets[i * 3] += dustVels[i * 3];
-        dustOffsets[i * 3 + 1] += dustVels[i * 3 + 1];
-        dustOffsets[i * 3 + 2] += dustVels[i * 3 + 2];
+        const i3 = i * 3;
+        dustOffsets[i3] += dustVels[i3];
+        dustOffsets[i3 + 1] += dustVels[i3 + 1];
+        dustOffsets[i3 + 2] += dustVels[i3 + 2];
         
-        if (Math.abs(dustOffsets[i * 3]) > 25) dustOffsets[i * 3] = (Math.random() - 0.5) * 50;
-        if (Math.abs(dustOffsets[i * 3 + 1]) > 25) dustOffsets[i * 3 + 1] = (Math.random() - 0.5) * 50;
-        if (Math.abs(dustOffsets[i * 3 + 2]) > 25) dustOffsets[i * 3 + 2] = (Math.random() - 0.5) * 50;
+        if (Math.abs(dustOffsets[i3]) > 25) dustOffsets[i3] = (Math.random() - 0.5) * 50;
+        if (Math.abs(dustOffsets[i3 + 1]) > 25) dustOffsets[i3 + 1] = (Math.random() - 0.5) * 50;
+        if (Math.abs(dustOffsets[i3 + 2]) > 25) dustOffsets[i3 + 2] = (Math.random() - 0.5) * 50;
         
-        dustPosAttr.setXYZ(i, camera.position.x + dustOffsets[i * 3], camera.position.y + dustOffsets[i * 3 + 1], camera.position.z + dustOffsets[i * 3 + 2]);
+        dArr[i3] = camX + dustOffsets[i3];
+        dArr[i3 + 1] = camY + dustOffsets[i3 + 1];
+        dArr[i3 + 2] = camZ + dustOffsets[i3 + 2];
       }
       dustPosAttr.needsUpdate = true;
 
-      // Dynamic Warp Easing based on scroll speed
-      const st = ScrollTrigger.getAll()[0];
+      // Dynamic Warp Easing based on scroll speed (using cached ScrollTrigger reference)
+      const st = stInstance;
       let velocity = 0;
       if (st) {
         velocity = Math.abs(st.getVelocity());
@@ -2141,14 +2153,18 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
         camera.fov = 60 + Math.min(26, velocity * 0.012);
         camera.updateProjectionMatrix();
 
-        // Warp particles fade-in and animate
+        // Warp particles fade-in and animate (optimized direct TypedArray edits)
         if (velocity > 120) {
           warpMat.opacity = Math.min(0.85, (velocity - 120) / 400);
           const wPosAttr = warpGeo.attributes.position as THREE.BufferAttribute;
+          const wArr = wPosAttr.array as Float32Array;
           for (let i = 0; i < 600; i++) {
-            let z = wPosAttr.getZ(i) + velocity * 0.008;
-            if (z > camera.position.z + 10) z = camera.position.z - 80;
-            wPosAttr.setXYZ(i, camera.position.x + (Math.random() - 0.5) * 40, camera.position.y + (Math.random() - 0.5) * 40, z);
+            const i3 = i * 3;
+            let z = wArr[i3 + 2] + velocity * 0.008;
+            if (z > camZ + 10) z = camZ - 80;
+            wArr[i3] = camX + (Math.random() - 0.5) * 40;
+            wArr[i3 + 1] = camY + (Math.random() - 0.5) * 40;
+            wArr[i3 + 2] = z;
           }
           wPosAttr.needsUpdate = true;
         } else {
@@ -2249,6 +2265,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
         }
       }
     });
+    stInstance = tl.scrollTrigger;
 
     // Curving camera slalom path - shifted by 1.0 to align perfectly with the 11 HTML sections (10 scroll intervals)
     tl.to(camera.position, { z: 18, x: 0, y: 0.3, ease: "power2.inOut" }, 1)       // Sun
@@ -2278,10 +2295,14 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     });
 
     const handleResize = () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      composer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setSize(w, h);
+      composer.setSize(w, h);
+      // Explicitly downscale bloom pass resolution for performance after composer resize
+      bloomPass.setSize(w / 2, h / 2);
     };
     window.addEventListener('resize', handleResize);
 
