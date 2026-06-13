@@ -877,83 +877,69 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     scene.add(warpSystem);
 
     // --- SPACE SHADER BACKDROP ---
-    const skyboxGeo = addDisposable(new MobileSphereGeometry(950, 32, 32));
-    const skyboxMat = addDisposable(new THREE.ShaderMaterial({
-      uniforms: { time: { value: 0 } },
-      vertexShader: `
-        varying vec3 vWorldPosition;
-        void main() {
-          vWorldPosition = position;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: isMobile ? `
-        varying vec3 vWorldPosition;
-        uniform float time;
-        float hash(float n) { return fract(sin(n) * 43758.5453123); }
-        void main() {
-          vec3 dir = normalize(vWorldPosition);
-          float stars = 0.0;
-          float starHash = hash(dir.x * 123.45 + dir.y * 345.67 + dir.z * 567.89);
-          if (starHash > 0.993) {
-            float brightness = hash(starHash * 23.45) * (0.5 + 0.5 * sin(time * 1.5 + starHash * 10.0));
-            stars = brightness;
+    let skybox: THREE.Mesh | undefined = undefined;
+    let skyboxMat: THREE.ShaderMaterial | undefined = undefined;
+    if (!isMobile) {
+      const skyboxGeo = addDisposable(new MobileSphereGeometry(950, 32, 32));
+      skyboxMat = addDisposable(new THREE.ShaderMaterial({
+        uniforms: { time: { value: 0 } },
+        vertexShader: `
+          varying vec3 vWorldPosition;
+          void main() {
+            vWorldPosition = position;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
           }
-          float fineStarHash = hash(dir.x * 234.56 + dir.y * 456.78 + dir.z * 678.90);
-          if (fineStarHash > 0.997) {
-            stars += hash(fineStarHash * 45.67) * 0.45;
+        `,
+        fragmentShader: `
+          varying vec3 vWorldPosition;
+          uniform float time;
+          ${noiseGLSL}
+          void main() {
+            vec3 dir = normalize(vWorldPosition);
+            
+            // Starfield (high frequency noise)
+            float stars = 0.0;
+            float starHash = hash(dir.x * 123.45 + dir.y * 345.67 + dir.z * 567.89);
+            if (starHash > 0.993) {
+              float brightness = hash(starHash * 23.45) * (0.5 + 0.5 * sin(time * 1.5 + starHash * 10.0));
+              stars = brightness;
+            }
+            
+            // Secondary layer of finer, denser stars
+            float fineStarHash = hash(dir.x * 234.56 + dir.y * 456.78 + dir.z * 678.90);
+            if (fineStarHash > 0.997) {
+              stars += hash(fineStarHash * 45.67) * 0.45;
+            }
+            
+            // Nebulae clouds (FBM noise with deep color layers)
+            vec3 nebPos = dir * 2.8 + vec3(time * 0.003, 0.0, 0.0);
+            float nebVal1 = fbm(nebPos);
+            float nebVal2 = fbm(nebPos * 1.6 - vec3(0.0, time * 0.002, time * 0.001));
+            
+            // Space nebula colors
+            vec3 spaceBlue = vec3(0.01, 0.03, 0.12);
+            vec3 spacePurple = vec3(0.06, 0.01, 0.10);
+            vec3 spaceMagenta = vec3(0.12, 0.02, 0.07);
+            vec3 spaceOrange = vec3(0.12, 0.05, 0.01);
+            
+            vec3 nebulaColor = mix(spaceBlue, spacePurple, nebVal1);
+            nebulaColor = mix(nebulaColor, spaceMagenta, nebVal2 * 0.5);
+            nebulaColor = mix(nebulaColor, spaceOrange, smoothstep(0.48, 0.78, nebVal1 + nebVal2) * 0.4);
+            
+            // Dense Milky Way dust lane band along the galactic plane
+            float galBand = smoothstep(0.35, 0.0, abs(dir.y + 0.12 * sin(dir.x * 3.5 + dir.z * 2.5)));
+            vec3 milkyWayColor = vec3(0.22, 0.15, 0.11) * galBand * (0.3 + 0.7 * fbm(dir * 4.2));
+            
+            vec3 finalColor = nebulaColor * 0.75 + milkyWayColor + vec3(1.0) * stars;
+            gl_FragColor = vec4(finalColor, 1.0);
           }
-          gl_FragColor = vec4(vec3(stars * 0.72), 1.0);
-        }
-      ` : `
-        varying vec3 vWorldPosition;
-        uniform float time;
-        ${noiseGLSL}
-        void main() {
-          vec3 dir = normalize(vWorldPosition);
-          
-          // Starfield (high frequency noise)
-          float stars = 0.0;
-          float starHash = hash(dir.x * 123.45 + dir.y * 345.67 + dir.z * 567.89);
-          if (starHash > 0.993) {
-            float brightness = hash(starHash * 23.45) * (0.5 + 0.5 * sin(time * 1.5 + starHash * 10.0));
-            stars = brightness;
-          }
-          
-          // Secondary layer of finer, denser stars
-          float fineStarHash = hash(dir.x * 234.56 + dir.y * 456.78 + dir.z * 678.90);
-          if (fineStarHash > 0.997) {
-            stars += hash(fineStarHash * 45.67) * 0.45;
-          }
-          
-          // Nebulae clouds (FBM noise with deep color layers)
-          vec3 nebPos = dir * 2.8 + vec3(time * 0.003, 0.0, 0.0);
-          float nebVal1 = fbm(nebPos);
-          float nebVal2 = fbm(nebPos * 1.6 - vec3(0.0, time * 0.002, time * 0.001));
-          
-          // Space nebula colors
-          vec3 spaceBlue = vec3(0.01, 0.03, 0.12);
-          vec3 spacePurple = vec3(0.06, 0.01, 0.10);
-          vec3 spaceMagenta = vec3(0.12, 0.02, 0.07);
-          vec3 spaceOrange = vec3(0.12, 0.05, 0.01);
-          
-          vec3 nebulaColor = mix(spaceBlue, spacePurple, nebVal1);
-          nebulaColor = mix(nebulaColor, spaceMagenta, nebVal2 * 0.5);
-          nebulaColor = mix(nebulaColor, spaceOrange, smoothstep(0.48, 0.78, nebVal1 + nebVal2) * 0.4);
-          
-          // Dense Milky Way dust lane band along the galactic plane
-          float galBand = smoothstep(0.35, 0.0, abs(dir.y + 0.12 * sin(dir.x * 3.5 + dir.z * 2.5)));
-          vec3 milkyWayColor = vec3(0.22, 0.15, 0.11) * galBand * (0.3 + 0.7 * fbm(dir * 4.2));
-          
-          vec3 finalColor = nebulaColor * 0.75 + milkyWayColor + vec3(1.0) * stars;
-          gl_FragColor = vec4(finalColor, 1.0);
-        }
-      `,
-      side: THREE.BackSide,
-      depthWrite: false
-    }));
-    const skybox = new THREE.Mesh(skyboxGeo, skyboxMat);
-    scene.add(skybox);
+        `,
+        side: THREE.BackSide,
+        depthWrite: false
+      }));
+      skybox = new THREE.Mesh(skyboxGeo, skyboxMat);
+      scene.add(skybox);
+    }
 
     // --- LIGHTING ENVIRONMENT ---
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.15); // Increased base light for realistic planet details
@@ -1093,13 +1079,15 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     // 2. MERCURY (Low segment far, high near - lod balance)
     const mercury = new THREE.Mesh(
       addDisposable(new MobileSphereGeometry(0.5, 48, 48)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        map: texMercury,
-        bumpMap: texMercury,
-        bumpScale: 0.008,
-        roughness: 0.88,
-        metalness: 0.1
-      }))
+      addDisposable(isMobile
+        ? new THREE.MeshPhongMaterial({ map: texMercury, bumpMap: texMercury, bumpScale: 0.005, shininess: 8 })
+        : new THREE.MeshStandardMaterial({
+            map: texMercury,
+            bumpMap: texMercury,
+            bumpScale: 0.008,
+            roughness: 0.88,
+            metalness: 0.1
+          }))
     );
     mercury.position.set(0, 0, -40);
     mercury.userData = { name: 'Mercury', isHovered: false };
@@ -1155,7 +1143,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
  
     // 3. VENUS (Custom volumetric shader simulating hot dense atmosphere & cloud super-rotation)
     const venusMat = isMobile
-      ? addDisposable(new THREE.MeshStandardMaterial({ map: texVenus, roughness: 0.9, metalness: 0.1 }))
+      ? addDisposable(new THREE.MeshPhongMaterial({ map: texVenus, shininess: 12 }))
       : addDisposable(new THREE.ShaderMaterial({
           uniforms: {
             time: { value: 0 },
@@ -1233,12 +1221,12 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     // 4. EARTH (PBR + custom shader for day/night city lights, elevation bump, water specular, and cloud shadows)
     const earthGeo = addDisposable(new MobileSphereGeometry(1.3, 48, 48));
     const earthMat = isMobile
-      ? addDisposable(new THREE.MeshStandardMaterial({
+      ? addDisposable(new THREE.MeshPhongMaterial({
           map: texEarth,
           bumpMap: texEarthTopology,
-          bumpScale: 0.012,
-          roughness: 0.45,
-          metalness: 0.15
+          bumpScale: 0.008,
+          shininess: 25,
+          specular: new THREE.Color(0x333333)
         }))
       : addDisposable(new THREE.ShaderMaterial({
           uniforms: {
@@ -1273,13 +1261,20 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     // The Moon (Luna) orbiting Earth
     const moon = new THREE.Mesh(
       addDisposable(new MobileSphereGeometry(0.35, 32, 32)), // 27% Earth's size
-      addDisposable(new THREE.MeshStandardMaterial({
-        map: texMercury, // Mercury texture is an excellent cratered moon-like match
-        bumpMap: texMercury,
-        bumpScale: 0.005,
-        roughness: 0.9,
-        metalness: 0.05
-      }))
+      addDisposable(isMobile
+        ? new THREE.MeshPhongMaterial({
+            map: texMercury,
+            bumpMap: texMercury,
+            bumpScale: 0.005,
+            shininess: 5
+          })
+        : new THREE.MeshStandardMaterial({
+            map: texMercury, // Mercury texture is an excellent cratered moon-like match
+            bumpMap: texMercury,
+            bumpScale: 0.005,
+            roughness: 0.9,
+            metalness: 0.05
+          }))
     );
     moon.castShadow = true;
     moon.receiveShadow = true;
@@ -1313,13 +1308,15 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     // 5. MARS
     const mars = new THREE.Mesh(
       addDisposable(new MobileSphereGeometry(0.7, 48, 48)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        map: texMars,
-        bumpMap: texMars,
-        bumpScale: 0.012,
-        roughness: 0.85,
-        metalness: 0.05
-      }))
+      addDisposable(isMobile
+        ? new THREE.MeshPhongMaterial({ map: texMars, bumpMap: texMars, bumpScale: 0.008, shininess: 8 })
+        : new THREE.MeshStandardMaterial({
+            map: texMars,
+            bumpMap: texMars,
+            bumpScale: 0.012,
+            roughness: 0.85,
+            metalness: 0.05
+          }))
     );
     mars.position.set(0, 0, -160);
     mars.userData = { name: 'Mars', isHovered: false };
@@ -1413,8 +1410,8 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
  
     // 6. INSTANCED 3D ASTEROID BELT (Awwwards optimization - 1 draw call!)
     const asteroidCount = isMobile ? 700 : 2200;
-    // Subdivided dodecahedron geometry to allow smooth organic deformations
-    const rockGeo = addDisposable(new THREE.DodecahedronGeometry(0.22, 2));
+    // Subdivided dodecahedron geometry to allow smooth organic deformations (low detail on mobile)
+    const rockGeo = addDisposable(new THREE.DodecahedronGeometry(0.22, isMobile ? 0 : 2));
     const rockPosAttr = rockGeo.attributes.position;
     for (let i = 0; i < rockPosAttr.count; i++) {
       const x = rockPosAttr.getX(i);
@@ -1431,14 +1428,21 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     }
     rockGeo.computeVertexNormals();
  
-    const rockMat = addDisposable(new THREE.MeshStandardMaterial({
-      map: texMercury, // Map the cratered rock texture to diffuse map to prevent flat shading
-      bumpMap: texMercury,
-      bumpScale: 0.075,
-      roughness: 0.9,
-      metalness: 0.02,
-      emissive: new THREE.Color(0x0e0c0a) // Extremely subtle ambient visibility against deep space
-    }));
+    const rockMat = addDisposable(isMobile
+      ? new THREE.MeshPhongMaterial({
+          map: texMercury,
+          bumpMap: texMercury,
+          bumpScale: 0.05,
+          shininess: 5
+        })
+      : new THREE.MeshStandardMaterial({
+          map: texMercury, // Map the cratered rock texture to diffuse map to prevent flat shading
+          bumpMap: texMercury,
+          bumpScale: 0.075,
+          roughness: 0.9,
+          metalness: 0.02,
+          emissive: new THREE.Color(0x0e0c0a) // Extremely subtle ambient visibility against deep space
+        }));
  
     const asteroidBelt = new THREE.InstancedMesh(rockGeo, rockMat, asteroidCount);
     asteroidBelt.position.set(0, 0, 0); // Center at origin to rotate around the Z-axis smoothly
@@ -1505,7 +1509,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     const texJupiter = loadTexture('/2k_jupiter.jpg');
     const jupGeo = addDisposable(new MobileSphereGeometry(3.5, 54, 54));
     const jupMat = isMobile
-      ? addDisposable(new THREE.MeshStandardMaterial({ map: texJupiter, roughness: 0.85, metalness: 0.15 }))
+      ? addDisposable(new THREE.MeshPhongMaterial({ map: texJupiter, shininess: 12 }))
       : addDisposable(new THREE.ShaderMaterial({
           uniforms: {
             time: { value: 0 },
@@ -1638,7 +1642,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     const saturnMesh = new THREE.Mesh(
       addDisposable(new MobileSphereGeometry(2.8, 54, 54)),
       isMobile
-        ? addDisposable(new THREE.MeshStandardMaterial({ map: texSaturn, roughness: 0.9, metalness: 0.1 }))
+        ? addDisposable(new THREE.MeshPhongMaterial({ map: texSaturn, shininess: 12 }))
         : addDisposable(new THREE.ShaderMaterial({
             uniforms: {
               map: { value: texSaturn },
@@ -1667,13 +1671,12 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     const ringMesh = new THREE.Mesh(
       ringGeo,
       isMobile
-        ? addDisposable(new THREE.MeshStandardMaterial({
+        ? addDisposable(new THREE.MeshPhongMaterial({
             map: texSaturnRings,
             transparent: true,
             side: THREE.DoubleSide,
             depthWrite: true,
-            roughness: 0.9,
-            metalness: 0.1
+            shininess: 8
           }))
         : addDisposable(new THREE.ShaderMaterial({
             uniforms: {
@@ -1767,13 +1770,15 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     uranusGroup.position.set(0, 0, -360);
     const uranusMesh = new THREE.Mesh(
       addDisposable(new MobileSphereGeometry(2.0, 48, 48)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        map: texUranus,
-        bumpMap: texUranus,
-        bumpScale: 0.005,
-        roughness: 0.88,
-        metalness: 0.0
-      }))
+      addDisposable(isMobile
+        ? new THREE.MeshPhongMaterial({ map: texUranus, shininess: 15 })
+        : new THREE.MeshStandardMaterial({
+            map: texUranus,
+            bumpMap: texUranus,
+            bumpScale: 0.005,
+            roughness: 0.88,
+            metalness: 0.0
+          }))
     );
     uranusMesh.userData = { name: 'Uranus', isHovered: false };
     uranusMesh.castShadow = false;
@@ -1783,13 +1788,22 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     // Uranus thin ring
     const uRing = new THREE.Mesh(
       addDisposable(new THREE.RingGeometry(2.5, 3.2, 64)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        color: 0x93E3E3,
-        transparent: true,
-        opacity: 0.18,
-        side: THREE.DoubleSide,
-        depthWrite: true
-      }))
+      addDisposable(isMobile
+        ? new THREE.MeshPhongMaterial({
+            color: 0x93E3E3,
+            transparent: true,
+            opacity: 0.18,
+            side: THREE.DoubleSide,
+            depthWrite: true,
+            shininess: 5
+          })
+        : new THREE.MeshStandardMaterial({
+            color: 0x93E3E3,
+            transparent: true,
+            opacity: 0.18,
+            side: THREE.DoubleSide,
+            depthWrite: true
+          }))
     );
     uRing.rotation.x = Math.PI / 2;
     uranusGroup.add(uRing);
@@ -1848,13 +1862,15 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     neptuneGroup.position.set(0, 0, -430);
     const neptuneMesh = new THREE.Mesh(
       addDisposable(new MobileSphereGeometry(1.9, 48, 48)),
-      addDisposable(new THREE.MeshStandardMaterial({
-        map: texNeptune,
-        bumpMap: texNeptune,
-        bumpScale: 0.006,
-        roughness: 0.85,
-        metalness: 0.05
-      }))
+      addDisposable(isMobile
+        ? new THREE.MeshPhongMaterial({ map: texNeptune, shininess: 15 })
+        : new THREE.MeshStandardMaterial({
+            map: texNeptune,
+            bumpMap: texNeptune,
+            bumpScale: 0.006,
+            roughness: 0.85,
+            metalness: 0.05
+          }))
     );
     neptuneMesh.userData = { name: 'Neptune', isHovered: false };
     neptuneMesh.castShadow = false;
@@ -1955,7 +1971,9 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       mouse.y = currentMouseNDCY;
     };
 
-    window.addEventListener('mousemove', onMouseMove);
+    if (!isMobile) {
+      window.addEventListener('mousemove', onMouseMove);
+    }
 
     // Cache the ScrollTrigger reference outside the loop, initialized as null
     let stInstance: any = null;
@@ -1975,34 +1993,36 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
         ScrollTrigger.update();
       }
 
-      // Hover Raycasting (run once per frame instead of on every mousemove event!)
-      raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(interactableMeshes, false);
-      let hoveredObj = null;
-      if (intersects.length > 0) {
-        hoveredObj = intersects[0].object;
-      }
-
-      interactableMeshes.forEach(mesh => {
-        if (mesh === hoveredObj) {
-          if (!mesh.userData.isHovered) {
-            mesh.userData.isHovered = true;
-            gsap.to(mesh.scale, { x: 1.08, y: 1.08, z: 1.08, duration: 0.4, ease: "power2.out" });
-          }
-        } else {
-          if (mesh.userData.isHovered) {
-            mesh.userData.isHovered = false;
-            gsap.to(mesh.scale, { x: 1, y: 1, z: 1, duration: 0.4, ease: "power2.out" });
-          }
+      // Hover Raycasting (run once per frame instead of on every mousemove event!) - Disabled on mobile
+      if (!isMobile) {
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(interactableMeshes, false);
+        let hoveredObj = null;
+        if (intersects.length > 0) {
+          hoveredObj = intersects[0].object;
         }
-      });
+
+        interactableMeshes.forEach(mesh => {
+          if (mesh === hoveredObj) {
+            if (!mesh.userData.isHovered) {
+              mesh.userData.isHovered = true;
+              gsap.to(mesh.scale, { x: 1.08, y: 1.08, z: 1.08, duration: 0.4, ease: "power2.out" });
+            }
+          } else {
+            if (mesh.userData.isHovered) {
+              mesh.userData.isHovered = false;
+              gsap.to(mesh.scale, { x: 1, y: 1, z: 1, duration: 0.4, ease: "power2.out" });
+            }
+          }
+        });
+      }
 
       // Update shader materials
       if (sunMat.uniforms) sunMat.uniforms.time.value = time;
       if (venusMat.uniforms) venusMat.uniforms.time.value = time;
       if (earthMat.uniforms) earthMat.uniforms.time.value = time;
       if (jupMat.uniforms) jupMat.uniforms.time.value = time;
-      if (skyboxMat.uniforms) skyboxMat.uniforms.time.value = time;
+      if (skyboxMat && skyboxMat.uniforms) skyboxMat.uniforms.time.value = time;
 
       // Update local sun positions for analytical shadows
       if (saturnMesh.material && (saturnMesh.material as THREE.ShaderMaterial).uniforms) {
@@ -2015,7 +2035,9 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       }
 
       // Make skybox float with camera position
-      skybox.position.copy(camera.position);
+      if (skybox) {
+        skybox.position.copy(camera.position);
+      }
 
       // Rotate asteroid belt around the Z-axis (swirls around the slalom flight path)
       asteroidBelt.rotation.z += 0.00022;
@@ -2395,16 +2417,34 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       .to(camera.position, { z: -418, x: 0.25, y: -0.1, ease: "power2.inOut" }, 9)  // Neptune
       .to(camera.position, { z: -220, y: 150, x: 0, ease: "power2.inOut" }, 10);     // Overview angle
 
-    gsap.utils.toArray('.reveal-text').forEach((el: any) => {
-      gsap.fromTo(el, 
-        { opacity: 0, y: 35 },
-        { opacity: 1, y: 0, duration: 0.8, scrollTrigger: { trigger: el, start: "top 85%", end: "top 25%", toggleActions: "play reverse play reverse" } }
-      );
-    });
+    if (!isMobile) {
+      gsap.utils.toArray('.reveal-text').forEach((el: any) => {
+        gsap.fromTo(el, 
+          { opacity: 0, y: 35 },
+          { opacity: 1, y: 0, duration: 0.8, scrollTrigger: { trigger: el, start: "top 85%", end: "top 25%", toggleActions: "play reverse play reverse" } }
+        );
+      });
+    }
+
+    let lastWidth = window.innerWidth;
+    let lastHeight = window.innerHeight;
 
     const handleResize = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
+      
+      // On mobile, ignore minor height changes (like address bar show/hide) to prevent WebGL backbuffer reallocation lag during scroll
+      if (isMobile) {
+        const widthChanged = w !== lastWidth;
+        const heightChangedSignificant = Math.abs(h - lastHeight) > 120; // significant change like orientation flip or keyboard
+        if (!widthChanged && !heightChangedSignificant) {
+          return;
+        }
+      }
+      
+      lastWidth = w;
+      lastHeight = h;
+      
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
@@ -2419,7 +2459,9 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     return () => {
       isMounted = false;
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('mousemove', onMouseMove);
+      if (!isMobile) {
+        window.removeEventListener('mousemove', onMouseMove);
+      }
       cancelAnimationFrame(frame);
       ScrollTrigger.getAll().forEach(t => t.kill());
       if (lenis) lenis.destroy();

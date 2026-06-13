@@ -115,9 +115,12 @@
   border-radius: 1rem;
 }
 
-/* Hide native cursor globally */
-html, body { cursor: none !important; }
-* { cursor: none !important; }
+/* Hide native cursor globally on hoverable devices only */
+@media (hover: hover) {
+  html, body { cursor: none !important; }
+  * { cursor: none !important; }
+  .explore-btn { cursor: none !important; }
+}
 
 /* Explore button */
 .explore-btn {
@@ -136,7 +139,6 @@ html, body { cursor: none !important; }
   background: linear-gradient(135deg, rgba(255,255,255,0.05), transparent);
   transition: all 0.3s ease;
   pointer-events: auto;
-  cursor: none !important;
 }
 .explore-btn:hover {
   color: rgba(255,255,255,1);
@@ -172,6 +174,20 @@ html, body { cursor: none !important; }
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
     background: rgba(10, 10, 12, 0.9) !important;
+  }
+  
+  html, body {
+    cursor: auto !important;
+    -webkit-overflow-scrolling: touch; /* iOS momentum touch scroll */
+    overflow-x: hidden;
+  }
+  
+  * {
+    cursor: auto !important;
+  }
+  
+  .explore-btn {
+    cursor: pointer !important;
   }
 }
 
