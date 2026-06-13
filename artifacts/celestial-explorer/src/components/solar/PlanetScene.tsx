@@ -191,10 +191,8 @@ const noiseGLSL = `
   }
   float fbm(in vec3 p) {
       float f = 0.0;
-      f += 0.5000*noise(p); p = p*2.01;
-      f += 0.2500*noise(p); p = p*2.02;
-      f += 0.1250*noise(p); p = p*2.03;
-      f += 0.0625*noise(p);
+      f += 0.6500*noise(p); p = p*2.02;
+      f += 0.3500*noise(p);
       return f;
   }
 `;
@@ -701,7 +699,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
 
     // --- LENIS SETUP ---
     const lenis = new Lenis({
-      duration: 1.2,
+      duration: 1.5,
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), // Exponential deceleration ease
       smoothWheel: true,
       syncTouch: true,
@@ -727,8 +725,8 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       return;
     }
 
-    // Enable high-end render settings
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Enable high-end render settings (limit to 1.5 for buttery-smooth FPS on 4K/retina screens)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = false;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -743,9 +741,9 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
     
-    // Volumetric space bloom pass (optimized at half resolution for high FPS)
+    // Volumetric space bloom pass (optimized at 1/4 resolution for ultra-high FPS glow)
     const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2),
+      new THREE.Vector2(window.innerWidth / 4, window.innerHeight / 4),
       0.48,  // Strength
       0.35,  // Radius
       0.82   // Threshold (only glowing sun/corona/atmosphere shells bloom)
@@ -2256,7 +2254,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
         trigger: containerRef.current,
         start: "top top",
         end: "bottom bottom",
-        scrub: 0.65, // More responsive and tight scroll scrub to prevent lag
+        scrub: 0.85, // Smooth camera deceleration glide
         snap: {
           snapTo: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], // Snaps to each planet stop and the overview
           duration: { min: 0.25, max: 0.65 },
@@ -2302,7 +2300,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       renderer.setSize(w, h);
       composer.setSize(w, h);
       // Explicitly downscale bloom pass resolution for performance after composer resize
-      bloomPass.setSize(w / 2, h / 2);
+      bloomPass.setSize(w / 4, h / 4);
     };
     window.addEventListener('resize', handleResize);
 
