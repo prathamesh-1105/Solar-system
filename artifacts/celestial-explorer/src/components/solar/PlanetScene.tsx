@@ -4,6 +4,25 @@ import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import Lenis from 'lenis';
 
+// Optimized mobile-friendly geometry class wrapper to downgrade segments on mobile for major FPS speedups
+class MobileSphereGeometry extends THREE.SphereGeometry {
+  constructor(radius?: number, widthSegments?: number, heightSegments?: number, phiStart?: number, phiLength?: number, thetaStart?: number, thetaLength?: number) {
+    const isMobile = typeof window !== 'undefined' && (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768);
+    let wSeg = widthSegments;
+    let hSeg = heightSegments;
+    if (isMobile) {
+      if (wSeg === 64) { wSeg = 24; hSeg = 24; }
+      else if (wSeg === 54) { wSeg = 20; hSeg = 20; }
+      else if (wSeg === 48) { wSeg = 16; hSeg = 16; }
+      else if (wSeg === 32) { wSeg = 12; hSeg = 12; }
+      else if (wSeg === 24) { wSeg = 8; hSeg = 8; }
+      else if (wSeg === 20) { wSeg = 8; hSeg = 8; }
+      else if (wSeg === 16) { wSeg = 6; hSeg = 6; }
+    }
+    super(radius, wSeg, hSeg, phiStart, phiLength, thetaStart, thetaLength);
+  }
+}
+
 // Post-processing imports
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -691,7 +710,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     if (!loaded || !canvasRef.current || !containerRef.current) return;
 
     let isMounted = true;
-
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
     if (!isWebGLAvailable()) {
       setWebglError(true);
       return;
@@ -725,8 +744,8 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       return;
     }
 
-    // Enable high-end render settings (limit to 1.5 for buttery-smooth FPS on 4K/retina screens)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    // Enable high-end render settings (limit to 1.5 on desktop, cap at 1.0 on mobile for high FPS)
+    renderer.setPixelRatio(isMobile ? 1.0 : Math.min(window.devicePixelRatio, 1.5));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = false;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -863,7 +882,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     const texNeptune = loadTexture('/2k_neptune.jpg');
 
     // --- INFINITE SPACE DUST ---
-    const dustCount = 800;
+    const dustCount = isMobile ? 250 : 800;
     const dustGeo = addDisposable(new THREE.BufferGeometry());
     const dustOffsets = new Float32Array(dustCount * 3);
     const dustVels = new Float32Array(dustCount * 3);
@@ -887,9 +906,10 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     scene.add(spaceDust);
 
     // --- WARP TRANSITION STREAKS ---
+    const warpCount = isMobile ? 150 : 600;
     const warpGeo = addDisposable(new THREE.BufferGeometry());
-    const warpPos = new Float32Array(600 * 3);
-    for (let i = 0; i < 600 * 3; i++) warpPos[i] = (Math.random() - 0.5) * 60;
+    const warpPos = new Float32Array(warpCount * 3);
+    for (let i = 0; i < warpCount * 3; i++) warpPos[i] = (Math.random() - 0.5) * 60;
     warpGeo.setAttribute('position', new THREE.BufferAttribute(warpPos, 3));
     const warpMat = addDisposable(new THREE.PointsMaterial({
       size: 0.12,
@@ -902,7 +922,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     scene.add(warpSystem);
 
     // --- SPACE SHADER BACKDROP ---
-    const skyboxGeo = addDisposable(new THREE.SphereGeometry(950, 32, 32));
+    const skyboxGeo = addDisposable(new MobileSphereGeometry(950, 32, 32));
     const skyboxMat = addDisposable(new THREE.ShaderMaterial({
       uniforms: { time: { value: 0 } },
       vertexShader: `
@@ -1021,7 +1041,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     };
 
     // 1. SUN
-    const sunGeo = addDisposable(new THREE.SphereGeometry(6, 64, 64));
+    const sunGeo = addDisposable(new MobileSphereGeometry(6, 64, 64));
     const sunMat = addDisposable(new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0 },
@@ -1093,7 +1113,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
  
     // 2. MERCURY (Low segment far, high near - lod balance)
     const mercury = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(0.5, 48, 48)),
+      addDisposable(new MobileSphereGeometry(0.5, 48, 48)),
       addDisposable(new THREE.MeshStandardMaterial({
         map: texMercury,
         bumpMap: texMercury,
@@ -1162,7 +1182,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       fragmentShader: venusShaders.fragmentShader
     }));
     const venus = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(1.2, 48, 48)),
+      addDisposable(new MobileSphereGeometry(1.2, 48, 48)),
       venusMat
     );
     venus.position.set(0, 0, -80);
@@ -1175,7 +1195,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
  
     // Venus atmosphere shell
     const vAtmos = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(1.26, 48, 48)),
+      addDisposable(new MobileSphereGeometry(1.26, 48, 48)),
       createAtmosphereMaterial(new THREE.Color('#E8C66A'), 0.45, 2.0)
     );
     venus.add(vAtmos);
@@ -1222,7 +1242,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     scene.add(magellanProbe);
  
     // 4. EARTH (PBR + custom shader for day/night city lights, elevation bump, water specular, and cloud shadows)
-    const earthGeo = addDisposable(new THREE.SphereGeometry(1.3, 48, 48));
+    const earthGeo = addDisposable(new MobileSphereGeometry(1.3, 48, 48));
     const earthMat = addDisposable(new THREE.ShaderMaterial({
       uniforms: {
         tDiffuse: { value: texEarth },
@@ -1246,14 +1266,14 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
  
     // Earth blue atmosphere (thin, crisp halo)
     const eAtmos = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(1.315, 48, 48)), // Tighten to match cloud layer exactly
+      addDisposable(new MobileSphereGeometry(1.315, 48, 48)), // Tighten to match cloud layer exactly
       createAtmosphereMaterial(new THREE.Color('#2b80ff'), 0.28, 3.2) // Softer, more integrated blue edge glow
     );
     earth.add(eAtmos);
 
     // Separate Earth clouds layer (REMOVED as requested by user to keep continents clean)
     /*
-    const cloudGeo = addDisposable(new THREE.SphereGeometry(1.312, 48, 48)); // Just inside atmosphere
+    const cloudGeo = addDisposable(new MobileSphereGeometry(1.312, 48, 48)); // Just inside atmosphere
     const cloudMat = addDisposable(new THREE.MeshStandardMaterial({
       alphaMap: texEarthClouds,
       transparent: true,
@@ -1271,7 +1291,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
 
     // The Moon (Luna) orbiting Earth
     const moon = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(0.35, 32, 32)), // 27% Earth's size
+      addDisposable(new MobileSphereGeometry(0.35, 32, 32)), // 27% Earth's size
       addDisposable(new THREE.MeshStandardMaterial({
         map: texMercury, // Mercury texture is an excellent cratered moon-like match
         bumpMap: texMercury,
@@ -1308,7 +1328,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
  
     // 5. MARS
     const mars = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(0.7, 48, 48)),
+      addDisposable(new MobileSphereGeometry(0.7, 48, 48)),
       addDisposable(new THREE.MeshStandardMaterial({
         map: texMars,
         bumpMap: texMars,
@@ -1327,7 +1347,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
  
     // Mars atmosphere shell (thin dust layer - tightened for scientific accuracy)
     const mAtmos = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(0.718, 48, 48)), // Tighter thin atmosphere
+      addDisposable(new MobileSphereGeometry(0.718, 48, 48)), // Tighter thin atmosphere
       createAtmosphereMaterial(new THREE.Color('#e05934'), 0.35, 3.5)
     );
     mars.add(mAtmos);
@@ -1399,7 +1419,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     scene.add(mroProbe);
  
     // 6. INSTANCED 3D ASTEROID BELT (Awwwards optimization - 1 draw call!)
-    const asteroidCount = 2200;
+    const asteroidCount = isMobile ? 700 : 2200;
     // Create random displaced rock geometries (deformed non-uniformly for potato-like shapes, scaled up for high visibility)
     const rockGeo = addDisposable(new THREE.DodecahedronGeometry(0.22, 1));
     const rockPosAttr = rockGeo.attributes.position;
@@ -1482,7 +1502,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
  
     // 7. JUPITER (swirling storms + bands)
     const texJupiter = loadTexture('/2k_jupiter.jpg');
-    const jupGeo = addDisposable(new THREE.SphereGeometry(3.5, 54, 54));
+    const jupGeo = addDisposable(new MobileSphereGeometry(3.5, 54, 54));
     const jupMat = addDisposable(new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0 },
@@ -1503,7 +1523,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
  
     // Jupiter atmosphere shell
     const jAtmos = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(3.7, 54, 54)),
+      addDisposable(new MobileSphereGeometry(3.7, 54, 54)),
       createAtmosphereMaterial(new THREE.Color('#F59E0B'), 0.32, 2.2)
     );
     jupiter.add(jAtmos);
@@ -1511,7 +1531,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     // Jupiter's 4 Galilean Moons: Io, Europa, Ganymede, and Callisto
     // Io (Yellow-orange volcanic)
     const io = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(0.06, 24, 24)),
+      addDisposable(new MobileSphereGeometry(0.06, 24, 24)),
       addDisposable(new THREE.MeshStandardMaterial({
         color: 0xe6df3c, // Sulfurous yellow-orange
         roughness: 0.8,
@@ -1524,7 +1544,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
 
     // Europa (Icy white-grey)
     const europa = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(0.05, 24, 24)),
+      addDisposable(new MobileSphereGeometry(0.05, 24, 24)),
       addDisposable(new THREE.MeshStandardMaterial({
         color: 0xd9d7cd, // Reflective ice-white
         roughness: 0.45,
@@ -1537,7 +1557,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
 
     // Ganymede (Grey-brown cratered - largest moon)
     const ganymede = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(0.08, 24, 24)),
+      addDisposable(new MobileSphereGeometry(0.08, 24, 24)),
       addDisposable(new THREE.MeshStandardMaterial({
         map: texMercury, // Reuse Mercury texture for moon-like cratering
         color: 0x8a8479, // Desaturated grey-brown albedo
@@ -1551,7 +1571,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
 
     // Callisto (Dark heavily cratered ice-rock)
     const callisto = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(0.075, 24, 24)),
+      addDisposable(new MobileSphereGeometry(0.075, 24, 24)),
       addDisposable(new THREE.MeshStandardMaterial({
         map: texMercury,
         color: 0x55514c, // Very dark grey-brown
@@ -1602,7 +1622,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     
     // Saturn Body
     const saturnMesh = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(2.8, 54, 54)),
+      addDisposable(new MobileSphereGeometry(2.8, 54, 54)),
       addDisposable(new THREE.ShaderMaterial({
         uniforms: {
           map: { value: texSaturn },
@@ -1651,14 +1671,14 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
  
     // Saturn atmosphere shell
     const sAtmos = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(3.0, 54, 54)),
+      addDisposable(new MobileSphereGeometry(3.0, 54, 54)),
       createAtmosphereMaterial(new THREE.Color('#E8D49A'), 0.3, 2.0)
     );
     saturnMesh.add(sAtmos);
 
     // Titan (Orange thick atmosphere moon)
     const titan = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(0.065, 24, 24)),
+      addDisposable(new MobileSphereGeometry(0.065, 24, 24)),
       addDisposable(new THREE.MeshStandardMaterial({
         color: 0xd1a156, // Golden orange albedo
         roughness: 0.95,
@@ -1671,7 +1691,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
 
     // Enceladus (Highly reflective icy white moon)
     const enceladus = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(0.015, 16, 16)),
+      addDisposable(new MobileSphereGeometry(0.015, 16, 16)),
       addDisposable(new THREE.MeshStandardMaterial({
         color: 0xffffff,
         roughness: 0.35,
@@ -1712,7 +1732,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     const uranusGroup = new THREE.Group();
     uranusGroup.position.set(0, 0, -360);
     const uranusMesh = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(2.0, 48, 48)),
+      addDisposable(new MobileSphereGeometry(2.0, 48, 48)),
       addDisposable(new THREE.MeshStandardMaterial({
         map: texUranus,
         bumpMap: texUranus,
@@ -1746,14 +1766,14 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
  
     // Uranus atmosphere shell
     const uAtmos = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(2.14, 48, 48)),
+      addDisposable(new MobileSphereGeometry(2.14, 48, 48)),
       createAtmosphereMaterial(new THREE.Color('#93E3E3'), 0.42, 2.0)
     );
     uranusMesh.add(uAtmos);
 
     // Titania (Grey cratered moon)
     const titania = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(0.025, 16, 16)),
+      addDisposable(new MobileSphereGeometry(0.025, 16, 16)),
       addDisposable(new THREE.MeshStandardMaterial({
         color: 0xa0a0a0,
         roughness: 0.9,
@@ -1785,7 +1805,7 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
     const neptuneGroup = new THREE.Group();
     neptuneGroup.position.set(0, 0, -430);
     const neptuneMesh = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(1.9, 48, 48)),
+      addDisposable(new MobileSphereGeometry(1.9, 48, 48)),
       addDisposable(new THREE.MeshStandardMaterial({
         map: texNeptune,
         bumpMap: texNeptune,
@@ -1804,14 +1824,14 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
  
     // Neptune atmosphere shell
     const nAtmos = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(2.02, 48, 48)),
+      addDisposable(new MobileSphereGeometry(2.02, 48, 48)),
       createAtmosphereMaterial(new THREE.Color('#3B82F6'), 0.5, 2.0)
     );
     neptuneMesh.add(nAtmos);
 
     // Triton moon (retrograde orbit!)
     const triton = new THREE.Mesh(
-      addDisposable(new THREE.SphereGeometry(0.038, 20, 20)),
+      addDisposable(new MobileSphereGeometry(0.038, 20, 20)),
       addDisposable(new THREE.MeshStandardMaterial({
         color: 0xd9d5c5, // Pale pinkish-grey/yellow albedo
         roughness: 0.8,
@@ -2156,7 +2176,8 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
           warpMat.opacity = Math.min(0.85, (velocity - 120) / 400);
           const wPosAttr = warpGeo.attributes.position as THREE.BufferAttribute;
           const wArr = wPosAttr.array as Float32Array;
-          for (let i = 0; i < 600; i++) {
+          const wCount = wPosAttr.count;
+          for (let i = 0; i < wCount; i++) {
             const i3 = i * 3;
             let z = wArr[i3 + 2] + velocity * 0.008;
             if (z > camZ + 10) z = camZ - 80;
@@ -2243,8 +2264,12 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
         hudProgressRef.current.style.strokeDashoffset = String(strokeDashOffset);
       }
 
-      // Render composer instead of raw renderer (applies post-processing bloom!)
-      composer.render();
+      // Render composer instead of raw renderer (applies post-processing bloom on desktop, direct render on mobile for 60 FPS)
+      if (isMobile) {
+        renderer.render(scene, camera);
+      } else {
+        composer.render();
+      }
     };
     animate();
 
@@ -2300,7 +2325,9 @@ export default function PlanetScene({ loaded }: PlanetSceneProps) {
       renderer.setSize(w, h);
       composer.setSize(w, h);
       // Explicitly downscale bloom pass resolution for performance after composer resize
-      bloomPass.setSize(w / 4, h / 4);
+      if (!isMobile) {
+        bloomPass.setSize(w / 4, h / 4);
+      }
     };
     window.addEventListener('resize', handleResize);
 
